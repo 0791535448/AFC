@@ -3,15 +3,30 @@ ICT Infrastructure Automation System
 Backend API using FastAPI
 """
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 import mysql.connector
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+import secrets
 
 app = FastAPI(title="ICT Infrastructure Automation API", version="1.0.0")
+
+# Security configuration
+SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# OAuth2 scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # CORS middleware
 app.add_middleware(
@@ -36,6 +51,126 @@ def get_db_connection():
         return connection
     except mysql.connector.Error as err:
         raise HTTPException(status_code=500, detail=f"Database connection error: {err}")
+
+# Authentication functions
+def verify_password(plain_password, stored_password):
+    # Temporary plain text comparison for demo
+    return plain_password == stored_password
+
+def get_password_hash(password):
+    # Return password as-is for temporary solution
+    return password
+
+def get_user_by_username(username: str):
+    # Temporary hardcoded users until database is set up
+    users = {
+        "superadmin": {
+            "id": 1,
+            "username": "superadmin",
+            "email": "superadmin@company.com",
+            "full_name": "Super Administrator",
+            "role": "Super Admin",
+            "department": "IT",
+            "password_hash": "password123",
+            "is_active": True
+        },
+        "admin": {
+            "id": 2,
+            "username": "admin",
+            "email": "admin@company.com",
+            "full_name": "System Administrator",
+            "role": "Admin",
+            "department": "IT",
+            "password_hash": "password123",
+            "is_active": True
+        },
+        "jdoe": {
+            "id": 3,
+            "username": "jdoe",
+            "email": "john.doe@company.com",
+            "full_name": "John Doe",
+            "role": "Technician",
+            "department": "IT",
+            "password_hash": "password123",
+            "is_active": True
+        },
+        "jsmith": {
+            "id": 4,
+            "username": "jsmith",
+            "email": "jane.smith@company.com",
+            "full_name": "Jane Smith",
+            "role": "Manager",
+            "department": "Finance",
+            "password_hash": "password123",
+            "is_active": True
+        }
+    }
+    return users.get(username)
+
+def authenticate_user(username: str, password: str):
+    user = get_user_by_username(username)
+    if not user:
+        return False
+    if not verify_password(password, user["password_hash"]):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    user = get_user_by_username(username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_active_user(current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_active"):
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+# Authentication models
+class User(BaseModel):
+    username: str
+    email: EmailStr
+    full_name: str
+    role: str
+    department: Optional[str] = None
+    is_active: bool = True
+
+class UserCreate(User):
+    password: str
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
 
 # Pydantic models
 class HardwareItem(BaseModel):
@@ -86,9 +221,76 @@ async def root():
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now()}
 
-# Hardware endpoints
+# Authentication endpoints
+@app.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["username"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/login", response_model=Token)
+async def login(user_login: UserLogin):
+    user = authenticate_user(user_login.username, user_login.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["username"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/users/me", response_model=User)
+async def read_users_me(current_user: dict = Depends(get_current_active_user)):
+    return current_user
+
+@app.post("/users", response_model=User)
+async def create_user(user: UserCreate, current_user: dict = Depends(get_current_active_user)):
+    # Only admins can create users
+    if current_user.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only admins can create users")
+    
+    # Check if user already exists
+    existing_user = get_user_by_username(user.username)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        hashed_password = get_password_hash(user.password)
+        query = """
+        INSERT INTO users (username, email, full_name, role, department, password_hash, is_active, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        values = (
+            user.username, user.email, user.full_name, user.role, user.department,
+            hashed_password, user.is_active, datetime.now(), datetime.now()
+        )
+        cursor.execute(query, values)
+        conn.commit()
+        user_dict = user.dict()
+        user_dict.pop("password")  # Remove password from response
+        return user_dict
+    finally:
+        cursor.close()
+        conn.close()
+
+# Hardware endpoints (protected)
 @app.get("/hardware", response_model=List[HardwareItem])
-async def get_hardware():
+async def get_hardware(current_user: dict = Depends(get_current_active_user)):
     """Get all hardware items"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -101,7 +303,7 @@ async def get_hardware():
         conn.close()
 
 @app.post("/hardware", response_model=HardwareItem)
-async def create_hardware(hardware: HardwareItem):
+async def create_hardware(hardware: HardwareItem, current_user: dict = Depends(get_current_active_user)):
     """Create new hardware item"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -126,9 +328,9 @@ async def create_hardware(hardware: HardwareItem):
         cursor.close()
         conn.close()
 
-# Repair endpoints
+# Repair endpoints (protected)
 @app.get("/repairs", response_model=List[RepairRecord])
-async def get_repairs():
+async def get_repairs(current_user: dict = Depends(get_current_active_user)):
     """Get all repair records"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -141,7 +343,7 @@ async def get_repairs():
         conn.close()
 
 @app.post("/repairs", response_model=RepairRecord)
-async def create_repair(repair: RepairRecord):
+async def create_repair(repair: RepairRecord, current_user: dict = Depends(get_current_active_user)):
     """Create new repair record"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -165,9 +367,9 @@ async def create_repair(repair: RepairRecord):
         cursor.close()
         conn.close()
 
-# Asset Movement endpoints
+# Asset Movement endpoints (protected)
 @app.get("/asset-movements", response_model=List[AssetMovement])
-async def get_asset_movements():
+async def get_asset_movements(current_user: dict = Depends(get_current_active_user)):
     """Get all asset movement records"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
@@ -180,7 +382,7 @@ async def get_asset_movements():
         conn.close()
 
 @app.post("/asset-movements", response_model=AssetMovement)
-async def create_asset_movement(movement: AssetMovement):
+async def create_asset_movement(movement: AssetMovement, current_user: dict = Depends(get_current_active_user)):
     """Create new asset movement record"""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -204,4 +406,4 @@ async def create_asset_movement(movement: AssetMovement):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

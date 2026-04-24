@@ -214,8 +214,9 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     full_name VARCHAR(255) NOT NULL,
-    role ENUM('Admin', 'Manager', 'Technician', 'User') DEFAULT 'User',
+    role ENUM('Super Admin', 'Admin', 'Manager', 'Technician', 'User') DEFAULT 'User',
     department VARCHAR(100),
+    password_hash VARCHAR(255) NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -284,10 +285,11 @@ INSERT INTO hardware_register (asset_tag, branch_id, device_type_id, model_id, s
 ('ICT005', 2, 1, 5, 'TPX1C2023002', '2023-03-01', '2026-03-01', 1, 'IT Office', 'Jane IT', 'IT manager laptop'),
 ('ICT006', 3, 3, 6, 'EPL3150202201', '2022-08-15', '2025-08-15', 1, 'Finance Office', 'Mike Finance', 'Finance department backup printer');
 
-INSERT INTO users (username, email, full_name, role, department) VALUES
-('admin', 'admin@company.com', 'System Administrator', 'Admin', 'IT'),
-('jdoe', 'john.doe@company.com', 'John Doe', 'Technician', 'IT'),
-('jsmith', 'jane.smith@company.com', 'Jane Smith', 'Manager', 'Finance');
+INSERT INTO users (username, email, full_name, role, department, password_hash) VALUES
+('superadmin', 'superadmin@company.com', 'Super Administrator', 'Super Admin', 'IT', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6ukx.LFvOe'),
+('admin', 'admin@company.com', 'System Administrator', 'Admin', 'IT', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6ukx.LFvOe'),
+('jdoe', 'john.doe@company.com', 'John Doe', 'Technician', 'IT', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6ukx.LFvOe'),
+('jsmith', 'jane.smith@company.com', 'Jane Smith', 'Manager', 'Finance', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6ukx.LFvOe');
 
 -- Create views for common queries (updated for foreign keys)
 CREATE VIEW hardware_status_summary AS
