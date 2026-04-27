@@ -188,12 +188,19 @@ export const MassUpload: React.FC<MassUploadProps> = ({ onAssetsUploaded }) => {
           Mass Upload
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl bg-green-50 border-green-200">
         <DialogHeader>
-          <DialogTitle>Mass Upload Assets</DialogTitle>
-          <DialogDescription>
-            Upload multiple assets from a CSV file
-          </DialogDescription>
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Upload className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <DialogTitle className="text-green-800 text-xl font-bold">Mass Upload Assets</DialogTitle>
+              <DialogDescription className="text-green-700 text-base">
+                Upload multiple assets from a CSV file
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
         
         <div className="space-y-6">

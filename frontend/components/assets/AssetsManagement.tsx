@@ -31,6 +31,7 @@ import {
   FileText
 } from 'lucide-react'
 import { MassUpload } from './MassUpload'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 interface Asset {
   id: string
@@ -218,6 +219,8 @@ export const AssetsManagement: React.FC = () => {
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
   const [message, setMessage] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [assetToDelete, setAssetToDelete] = useState<string | null>(null)
 
   // Calculate statistics
   const stats = useMemo(() => {
@@ -245,7 +248,7 @@ export const AssetsManagement: React.FC = () => {
 
     // Apply column filters
     Object.entries(columnFilters).forEach(([key, value]) => {
-      if (value) {
+      if (value && value !== 'all') {
         filtered = filtered.filter(asset =>
           asset[key as keyof Asset].toString().toLowerCase().includes(value.toLowerCase())
         )
@@ -292,6 +295,14 @@ export const AssetsManagement: React.FC = () => {
   }
 
   const handleAddAsset = (newAsset: Omit<Asset, 'id'>) => {
+    // Check for duplicate asset tag
+    const existingAsset = assets.find(asset => asset.assetTag.toLowerCase() === newAsset.assetTag.toLowerCase())
+    if (existingAsset) {
+      setMessage(`Asset with tag "${newAsset.assetTag}" already exists`)
+      setTimeout(() => setMessage(''), 5000)
+      return
+    }
+
     const asset: Asset = {
       ...newAsset,
       id: (assets.length + 1).toString()
@@ -313,6 +324,17 @@ export const AssetsManagement: React.FC = () => {
   }
 
   const handleUpdateAsset = (updatedAsset: Asset) => {
+    // Check for duplicate asset tag (excluding current asset)
+    const existingAsset = assets.find(asset => 
+      asset.assetTag.toLowerCase() === updatedAsset.assetTag.toLowerCase() && 
+      asset.id !== updatedAsset.id
+    )
+    if (existingAsset) {
+      setMessage(`Asset with tag "${updatedAsset.assetTag}" already exists`)
+      setTimeout(() => setMessage(''), 5000)
+      return
+    }
+
     setAssets(prev => prev.map(asset => 
       asset.id === updatedAsset.id ? updatedAsset : asset
     ))
@@ -323,9 +345,24 @@ export const AssetsManagement: React.FC = () => {
   }
 
   const handleDeleteAsset = (id: string) => {
-    setAssets(prev => prev.filter(asset => asset.id !== id))
-    setMessage('Asset deleted successfully')
-    setTimeout(() => setMessage(''), 3000)
+    const asset = assets.find(a => a.id === id)
+    if (asset) {
+      setAssetToDelete(id)
+      setDeleteConfirmOpen(true)
+    }
+  }
+
+  const confirmDeleteAsset = () => {
+    if (assetToDelete) {
+      setAssets(prev => prev.filter(asset => asset.id !== assetToDelete))
+      setMessage('Asset deleted successfully')
+      setTimeout(() => setMessage(''), 3000)
+      setAssetToDelete(null)
+    }
+  }
+
+  const cancelDeleteAsset = () => {
+    setAssetToDelete(null)
   }
 
   const exportToCSV = () => {
@@ -545,14 +582,23 @@ export const AssetsManagement: React.FC = () => {
                     Add Asset
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Add New Asset</DialogTitle>
-                    <DialogDescription>
-                      Enter the details for the new asset
-                    </DialogDescription>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader className="pb-6 bg-gradient-to-r from-blue-50 to-indigo-50 -mx-6 px-6 pt-6 border-b">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-blue-600 rounded-lg">
+                        <Package className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <DialogTitle className="text-2xl font-bold text-gray-900">Add New Asset</DialogTitle>
+                        <DialogDescription className="text-gray-700 mt-1 text-base">
+                          Fill in the required information to add a new asset to the system
+                        </DialogDescription>
+                      </div>
+                    </div>
                   </DialogHeader>
-                  <AssetForm onSubmit={handleAddAsset} onCancel={() => setIsAddModalOpen(false)} />
+                  <div className="pt-6">
+                    <AssetForm onSubmit={handleAddAsset} onCancel={() => setIsAddModalOpen(false)} />
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>
@@ -589,14 +635,14 @@ export const AssetsManagement: React.FC = () => {
               <div>
                 <Label htmlFor="filter-status">Status</Label>
                 <Select
-                  value={columnFilters.status || ''}
+                  value={columnFilters.status || 'all'}
                   onValueChange={(value) => handleColumnFilter('status', value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Statuses</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="Active">Active</SelectItem>
                     <SelectItem value="Under Repair">Under Repair</SelectItem>
                     <SelectItem value="Retired">Retired</SelectItem>
@@ -771,12 +817,19 @@ export const AssetsManagement: React.FC = () => {
 
       {/* Edit Asset Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Asset</DialogTitle>
-            <DialogDescription>
-              Update the asset information
-            </DialogDescription>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-6 bg-gradient-to-r from-blue-50 to-indigo-50 -mx-6 px-6 pt-6 border-b">
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-blue-600 rounded-lg">
+                <Edit2 className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <DialogTitle className="text-2xl font-bold text-gray-900">Edit Asset</DialogTitle>
+                <DialogDescription className="text-gray-700 mt-1 text-base">
+                  Update the asset information and save changes
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
           {editingAsset && (
             <AssetForm
@@ -790,6 +843,19 @@ export const AssetsManagement: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Delete Asset"
+        description={`Are you sure you want to delete this asset? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteAsset}
+        onCancel={cancelDeleteAsset}
+        variant="destructive"
+      />
     </div>
   )
 }
@@ -816,23 +882,76 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
     purchaseCost: asset?.purchaseCost || 0,
     notes: asset?.notes || ''
   })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {}
+
+    if (!formData.assetTag.trim()) {
+      newErrors.assetTag = 'Asset tag is required'
+    } else if (!/^ICT\d{3,}$/.test(formData.assetTag)) {
+      newErrors.assetTag = 'Asset tag must start with ICT followed by numbers (e.g., ICT001)'
+    }
+
+    if (!formData.serialNumber.trim()) {
+      newErrors.serialNumber = 'Serial number is required'
+    }
+
+    if (!formData.deviceType) {
+      newErrors.deviceType = 'Device type is required'
+    }
+
+    if (!formData.make) {
+      newErrors.make = 'Make is required'
+    }
+
+    if (!formData.model.trim()) {
+      newErrors.model = 'Model is required'
+    }
+
+    if (formData.purchaseCost < 0) {
+      newErrors.purchaseCost = 'Purchase cost must be a positive number'
+    }
+
+    if (formData.purchaseDate && formData.warrantyExpiry) {
+      const purchaseDate = new Date(formData.purchaseDate)
+      const warrantyExpiry = new Date(formData.warrantyExpiry)
+      if (warrantyExpiry <= purchaseDate) {
+        newErrors.warrantyExpiry = 'Warranty expiry must be after purchase date'
+      }
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (asset) {
-      onSubmit({ ...formData, id: asset.id })
-    } else {
-      onSubmit(formData)
+    if (validateForm()) {
+      if (asset) {
+        onSubmit({ ...formData, id: asset.id })
+      } else {
+        onSubmit(formData)
+      }
     }
   }
 
   const handleInputChange = (field: keyof Omit<Asset, 'id'>, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear error for this field when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }))
+    }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="bg-gray-50 p-4 rounded-lg border">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+          <Package className="h-5 w-5 mr-2 text-blue-600" />
+          Basic Information
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="assetTag">Asset Tag *</Label>
           <Input
@@ -841,7 +960,11 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
             onChange={(e) => handleInputChange('assetTag', e.target.value)}
             placeholder="ICT001"
             required
+            className={errors.assetTag ? 'border-red-500' : ''}
           />
+          {errors.assetTag && (
+            <p className="text-red-500 text-sm mt-1">{errors.assetTag}</p>
+          )}
         </div>
         <div>
           <Label htmlFor="serialNumber">Serial Number *</Label>
@@ -851,7 +974,11 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
             onChange={(e) => handleInputChange('serialNumber', e.target.value)}
             placeholder="Enter serial number"
             required
+            className={errors.serialNumber ? 'border-red-500' : ''}
           />
+          {errors.serialNumber && (
+            <p className="text-red-500 text-sm mt-1">{errors.serialNumber}</p>
+          )}
         </div>
         <div>
           <Label htmlFor="deviceType">Device Type *</Label>
@@ -902,7 +1029,11 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
             onChange={(e) => handleInputChange('model', e.target.value)}
             placeholder="Enter model"
             required
+            className={errors.model ? 'border-red-500' : ''}
           />
+          {errors.model && (
+            <p className="text-red-500 text-sm mt-1">{errors.model}</p>
+          )}
         </div>
         <div>
           <Label htmlFor="status">Status *</Label>
@@ -965,7 +1096,11 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
             type="date"
             value={formData.warrantyExpiry}
             onChange={(e) => handleInputChange('warrantyExpiry', e.target.value)}
+            className={errors.warrantyExpiry ? 'border-red-500' : ''}
           />
+          {errors.warrantyExpiry && (
+            <p className="text-red-500 text-sm mt-1">{errors.warrantyExpiry}</p>
+          )}
         </div>
         <div>
           <Label htmlFor="purchaseCost">Purchase Cost</Label>
@@ -977,7 +1112,11 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
             placeholder="0.00"
             min="0"
             step="0.01"
+            className={errors.purchaseCost ? 'border-red-500' : ''}
           />
+          {errors.purchaseCost && (
+            <p className="text-red-500 text-sm mt-1">{errors.purchaseCost}</p>
+          )}
         </div>
         <div className="md:col-span-2">
           <Label htmlFor="notes">Notes</Label>
@@ -989,11 +1128,20 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
           />
         </div>
       </div>
-      <div className="flex justify-end space-x-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
+      </div>
+      <div className="flex justify-end space-x-3 pt-6 border-t">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onCancel}
+          className="px-6 py-2 h-11 text-base font-medium bg-white hover:bg-gray-50 border-gray-300 transition-colors"
+        >
           Cancel
         </Button>
-        <Button type="submit">
+        <Button 
+          type="submit"
+          className="px-6 py-2 h-11 text-base font-medium bg-blue-600 hover:bg-blue-700 transition-colors"
+        >
           {asset ? 'Update Asset' : 'Add Asset'}
         </Button>
       </div>
