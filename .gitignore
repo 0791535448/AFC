@@ -184,8 +184,8 @@ ehthumbs.db
 Thumbs.db
 
 # MySQL
-*.sql
-!database/schema.sql
+#*.sql
+#!database/schema.sql
 
 # Environment variables
 .env

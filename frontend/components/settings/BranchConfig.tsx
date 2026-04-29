@@ -30,44 +30,26 @@ interface Branch {
 }
 
 export const BranchConfig: React.FC = () => {
-  const [branches, setBranches] = useState<Branch[]>([
-    {
-      id: 1,
-      branch_name: 'Head Office',
-      branch_code: 'HO',
-      location_address: '123 Main Street, Nairobi, Kenya',
-      contact_person: 'John Manager',
-      contact_phone: '+254-712-345-678',
-      is_active: true
-    },
-    {
-      id: 2,
-      branch_name: 'IT Department',
-      branch_code: 'IT',
-      location_address: '456 Tech Avenue, Nairobi, Kenya',
-      contact_person: 'Jane IT',
-      contact_phone: '+254-723-456-789',
-      is_active: true
-    },
-    {
-      id: 3,
-      branch_name: 'Finance Department',
-      branch_code: 'FIN',
-      location_address: '789 Finance Road, Nairobi, Kenya',
-      contact_person: 'Mike Finance',
-      contact_phone: '+254-734-567-890',
-      is_active: true
-    },
-    {
-      id: 4,
-      branch_name: 'Reception',
-      branch_code: 'REC',
-      location_address: '321 Reception Lane, Nairobi, Kenya',
-      contact_person: 'Sarah Reception',
-      contact_phone: '+254-745-678-901',
-      is_active: true
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Load branches from API
+  useEffect(() => {
+    loadBranches()
+  }, [])
+
+  const loadBranches = async () => {
+    try {
+      const response = await fetch('http://localhost:8001/api/branches')
+      const data = await response.json()
+      setBranches(data.branches || [])
+    } catch (error) {
+      console.error('Error loading branches:', error)
+      setMessage('Failed to load branches')
+    } finally {
+      setLoading(false)
     }
-  ])
+  }
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formData, setFormData] = useState<Branch>({
@@ -84,24 +66,45 @@ export const BranchConfig: React.FC = () => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.branch_name || !formData.branch_code) {
       setMessage('Branch name and code are required')
       return
     }
 
-    if (editingId) {
-      setBranches(prev => prev.map(branch => 
-        branch.id === editingId ? { ...formData, id: editingId } : branch
-      ))
-      setMessage('Branch updated successfully')
-    } else {
-      const newBranch = { ...formData, id: Date.now() }
-      setBranches(prev => [...prev, newBranch])
-      setMessage('Branch added successfully')
-    }
+    try {
+      let response;
+      if (editingId) {
+        response = await fetch(`http://localhost:8001/api/branches/${editingId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+        setMessage('Branch updated successfully')
+      } else {
+        response = await fetch('http://localhost:8001/api/branches', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+        setMessage('Branch added successfully')
+      }
 
-    resetForm()
+      if (response.ok) {
+        await loadBranches() // Reload branches from API
+        resetForm()
+      } else {
+        const errorData = await response.json()
+        setMessage(errorData.detail || 'Failed to save branch')
+      }
+    } catch (error) {
+      console.error('Error saving branch:', error)
+      setMessage('Failed to save branch')
+    }
   }
 
   const handleEdit = (branch: Branch) => {
@@ -111,9 +114,23 @@ export const BranchConfig: React.FC = () => {
     setMessage('')
   }
 
-  const handleDelete = (id: number) => {
-    setBranches(prev => prev.filter(branch => branch.id !== id))
-    setMessage('Branch deleted successfully')
+  const handleDelete = async (id: number) => {
+    try {
+      const response = await fetch(`http://localhost:8001/api/branches/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        await loadBranches() // Reload branches from API
+        setMessage('Branch deleted successfully')
+      } else {
+        const errorData = await response.json()
+        setMessage(errorData.detail || 'Failed to delete branch')
+      }
+    } catch (error) {
+      console.error('Error deleting branch:', error)
+      setMessage('Failed to delete branch')
+    }
   }
 
   const resetForm = () => {
@@ -138,8 +155,15 @@ export const BranchConfig: React.FC = () => {
         </Alert>
       )}
 
+      {loading && (
+        <div className="text-center py-8 text-gray-500">
+          <Building className="h-12 w-12 mx-auto mb-4 text-gray-300 animate-pulse" />
+          <p>Loading branches...</p>
+        </div>
+      )}
+
       {/* Add/Edit Branch Form */}
-      {isAdding && (
+      {!loading && isAdding && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
@@ -220,7 +244,8 @@ export const BranchConfig: React.FC = () => {
       )}
 
       {/* Branches List */}
-      <Card>
+      {!loading && (
+        <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center">
@@ -300,6 +325,7 @@ export const BranchConfig: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

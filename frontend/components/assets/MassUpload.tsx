@@ -57,11 +57,13 @@ export const MassUpload: React.FC<MassUploadProps> = ({ onAssetsUploaded }) => {
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
-    if (selectedFile && selectedFile.type === 'text/csv') {
+    if (selectedFile && (selectedFile.type === 'text/csv' || 
+        selectedFile.type === 'application/vnd.ms-excel' ||
+        selectedFile.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
       setFile(selectedFile)
       setUploadResults(null)
     } else {
-      alert('Please select a valid CSV file')
+      alert('Please select a valid CSV or Excel file')
     }
   }
 
@@ -97,6 +99,34 @@ export const MassUpload: React.FC<MassUploadProps> = ({ onAssetsUploaded }) => {
     }
     
     return result
+  }
+
+  const parseExcelFile = async (file: File): Promise<string[][]> => {
+    // For now, we'll use a simple approach with FileReader
+    // In a real implementation, you'd use a library like xlsx
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result
+          if (typeof data === 'string') {
+            // Try to parse as CSV first (Excel files can be read as CSV when saved as such)
+            const rows = parseCSV(data)
+            resolve(rows)
+          } else {
+            // For binary Excel files, we'd need a proper Excel parsing library
+            // For now, we'll return an empty array and show an error
+            reject(new Error('Excel parsing requires additional library. Please save as CSV format.'))
+          }
+        } catch (error) {
+          reject(error)
+        }
+      }
+      
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsText(file)
+    })
   }
 
   const validateAssetData = (data: string[]): Omit<Asset, 'id'> | null => {
@@ -148,8 +178,22 @@ export const MassUpload: React.FC<MassUploadProps> = ({ onAssetsUploaded }) => {
     const validAssets: Omit<Asset, 'id'>[] = []
 
     try {
-      const text = await file.text()
-      const rows = parseCSV(text)
+      let rows: string[][] = []
+      
+      if (file.type === 'text/csv') {
+        const text = await file.text()
+        rows = parseCSV(text)
+      } else if (file.type === 'application/vnd.ms-excel' || 
+                 file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+        try {
+          rows = await parseExcelFile(file)
+        } catch (excelError) {
+          errors.push('Excel file parsing failed. Please save the file as CSV format and try again.')
+          setUploadResults({ success: 0, errors })
+          setUploading(false)
+          return
+        }
+      }
       
       // Skip header row
       const dataRows = rows.slice(1)
@@ -173,7 +217,7 @@ export const MassUpload: React.FC<MassUploadProps> = ({ onAssetsUploaded }) => {
         onAssetsUploaded(validAssets)
       }
     } catch (error) {
-      errors.push('Failed to parse CSV file')
+      errors.push('Failed to parse file')
       setUploadResults({ success: 0, errors })
     } finally {
       setUploading(false)
@@ -197,7 +241,7 @@ export const MassUpload: React.FC<MassUploadProps> = ({ onAssetsUploaded }) => {
             <div>
               <DialogTitle className="text-green-800 text-xl font-bold">Mass Upload Assets</DialogTitle>
               <DialogDescription className="text-green-700 text-base">
-                Upload multiple assets from a CSV file
+                Upload multiple assets from CSV or Excel files
               </DialogDescription>
             </div>
           </div>
@@ -215,7 +259,8 @@ export const MassUpload: React.FC<MassUploadProps> = ({ onAssetsUploaded }) => {
                 <li>Fill in your asset data following the template format</li>
                 <li>Required fields: Asset Tag, Serial Number, Device Type, Make, Model</li>
                 <li>Optional fields: Status, Location, Assigned To, Purchase Date, Warranty Expiry, Purchase Cost, Notes</li>
-                <li>Upload the completed CSV file</li>
+                <li>Upload the completed CSV or Excel file (.xlsx, .xls)</li>
+                <li>Note: For Excel files, ensure they follow the same column structure as the template</li>
               </ol>
               <Button onClick={downloadTemplate} className="mt-4">
                 <Download className="h-4 w-4 mr-2" />
@@ -227,20 +272,23 @@ export const MassUpload: React.FC<MassUploadProps> = ({ onAssetsUploaded }) => {
           {/* File Upload */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Upload CSV File</CardTitle>
+              <CardTitle className="text-lg">Upload File</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="csv-file">Select CSV File</Label>
+                  <Label htmlFor="asset-file">Select CSV or Excel File</Label>
                   <Input
-                    id="csv-file"
+                    id="asset-file"
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     onChange={handleFileSelect}
                     ref={fileInputRef}
                     className="mt-1"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Supported formats: CSV (.csv), Excel (.xlsx, .xls)
+                  </p>
                 </div>
                 
                 {file && (

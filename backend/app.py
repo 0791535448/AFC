@@ -41,7 +41,7 @@ app.add_middleware(
 DB_CONFIG = {
     'host': os.getenv('DB_HOST', 'localhost'),
     'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', ''),
+    'password': os.getenv('DB_PASSWORD', 'root'),
     'database': os.getenv('DB_NAME', 'ict_automation')
 }
 
@@ -400,6 +400,311 @@ async def create_asset_movement(movement: AssetMovement, current_user: dict = De
         conn.commit()
         movement.id = cursor.lastrowid
         return movement
+    finally:
+        cursor.close()
+        conn.close()
+
+# Settings API Endpoints
+
+# Branches API
+@app.get("/api/branches")
+async def get_branches():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM branches_data WHERE is_active = TRUE ORDER BY branch_name")
+        branches = cursor.fetchall()
+        return {"branches": branches}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/branches")
+async def create_branch(branch: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO branches_data (branch_name, branch_code, location_address, contact_person, contact_phone, is_active)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (branch.get('branch_name'), branch.get('branch_code'), branch.get('location_address'), 
+              branch.get('contact_person'), branch.get('contact_phone'), branch.get('is_active', True)))
+        conn.commit()
+        branch['id'] = cursor.lastrowid
+        return branch
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/branches/{branch_id}")
+async def update_branch(branch_id: int, branch: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE branches_data 
+            SET branch_name = %s, branch_code = %s, location_address = %s, 
+                contact_person = %s, contact_phone = %s, is_active = %s
+            WHERE id = %s
+        """, (branch.get('branch_name'), branch.get('branch_code'), branch.get('location_address'), 
+              branch.get('contact_person'), branch.get('contact_phone'), branch.get('is_active'), branch_id))
+        conn.commit()
+        return {**branch, "id": branch_id}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/api/branches/{branch_id}")
+async def delete_branch(branch_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE branches_data SET is_active = FALSE WHERE id = %s", (branch_id,))
+        conn.commit()
+        return {"message": "Branch deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Device Types API
+@app.get("/api/device-types")
+async def get_device_types():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM device_types_data WHERE is_active = TRUE ORDER BY device_type_name")
+        device_types = cursor.fetchall()
+        return {"device_types": device_types}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/device-types")
+async def create_device_type(device_type: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO device_types_data (device_type_name, description, category, is_active)
+            VALUES (%s, %s, %s, %s)
+        """, (device_type.get('device_type_name'), device_type.get('description'), 
+              device_type.get('category'), device_type.get('is_active', True)))
+        conn.commit()
+        device_type['id'] = cursor.lastrowid
+        return device_type
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/device-types/{device_type_id}")
+async def update_device_type(device_type_id: int, device_type: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE device_types_data 
+            SET device_type_name = %s, description = %s, category = %s, is_active = %s
+            WHERE id = %s
+        """, (device_type.get('device_type_name'), device_type.get('description'), 
+              device_type.get('category'), device_type.get('is_active'), device_type_id))
+        conn.commit()
+        return {**device_type, "id": device_type_id}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/api/device-types/{device_type_id}")
+async def delete_device_type(device_type_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE device_types_data SET is_active = FALSE WHERE id = %s", (device_type_id,))
+        conn.commit()
+        return {"message": "Device type deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Makes API
+@app.get("/api/makes")
+async def get_makes():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM hardware_makes_data WHERE is_active = TRUE ORDER BY make_name")
+        makes = cursor.fetchall()
+        return {"makes": makes}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/makes")
+async def create_make(make: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO hardware_makes_data (make_name, description, website, support_contact, is_active)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (make.get('make_name'), make.get('description'), make.get('website'), 
+              make.get('support_contact'), make.get('is_active', True)))
+        conn.commit()
+        make['id'] = cursor.lastrowid
+        return make
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/makes/{make_id}")
+async def update_make(make_id: int, make: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE hardware_makes_data 
+            SET make_name = %s, description = %s, website = %s, support_contact = %s, is_active = %s
+            WHERE id = %s
+        """, (make.get('make_name'), make.get('description'), make.get('website'), 
+              make.get('support_contact'), make.get('is_active'), make_id))
+        conn.commit()
+        return {**make, "id": make_id}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/api/makes/{make_id}")
+async def delete_make(make_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE hardware_makes_data SET is_active = FALSE WHERE id = %s", (make_id,))
+        conn.commit()
+        return {"message": "Make deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Models API
+@app.get("/api/models")
+async def get_models():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT m.*, hm.make_name, dt.device_type_name 
+            FROM hardware_models_data m
+            JOIN hardware_makes_data hm ON m.make_id = hm.id
+            JOIN device_types_data dt ON m.device_type_id = dt.id
+            WHERE m.is_active = TRUE 
+            ORDER BY m.model_name
+        """)
+        models = cursor.fetchall()
+        return {"models": models}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/models")
+async def create_model(model: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO hardware_models_data (model_name, make_id, device_type_id, specifications, release_year, is_active)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (model.get('model_name'), model.get('make_id'), model.get('device_type_id'), 
+              model.get('specifications'), model.get('release_year'), model.get('is_active', True)))
+        conn.commit()
+        model['id'] = cursor.lastrowid
+        return model
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/models/{model_id}")
+async def update_model(model_id: int, model: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE hardware_models_data 
+            SET model_name = %s, make_id = %s, device_type_id = %s, specifications = %s, release_year = %s, is_active = %s
+            WHERE id = %s
+        """, (model.get('model_name'), model.get('make_id'), model.get('device_type_id'), 
+              model.get('specifications'), model.get('release_year'), model.get('is_active'), model_id))
+        conn.commit()
+        return {**model, "id": model_id}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/api/models/{model_id}")
+async def delete_model(model_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE hardware_models_data SET is_active = FALSE WHERE id = %s", (model_id,))
+        conn.commit()
+        return {"message": "Model deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Statuses API
+@app.get("/api/statuses")
+async def get_statuses():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM hardware_status_data WHERE is_active = TRUE ORDER BY status_name")
+        statuses = cursor.fetchall()
+        return {"statuses": statuses}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/statuses")
+async def create_status(status: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO hardware_status_data (status_name, description, color_code, is_active)
+            VALUES (%s, %s, %s, %s)
+        """, (status.get('status_name'), status.get('description'), 
+              status.get('color_code'), status.get('is_active', True)))
+        conn.commit()
+        status['id'] = cursor.lastrowid
+        return status
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/statuses/{status_id}")
+async def update_status(status_id: int, status: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE hardware_status_data 
+            SET status_name = %s, description = %s, color_code = %s, is_active = %s
+            WHERE id = %s
+        """, (status.get('status_name'), status.get('description'), 
+              status.get('color_code'), status.get('is_active'), status_id))
+        conn.commit()
+        return {**status, "id": status_id}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/api/statuses/{status_id}")
+async def delete_status(status_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE hardware_status_data SET is_active = FALSE WHERE id = %s", (status_id,))
+        conn.commit()
+        return {"message": "Status deleted successfully"}
     finally:
         cursor.close()
         conn.close()

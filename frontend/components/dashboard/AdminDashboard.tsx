@@ -6,21 +6,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
-  Monitor, 
-  Wrench, 
-  Users, 
-  Settings, 
-  LogOut,
   Home,
-  Building,
-  Cpu,
   Package,
-  Tag,
-  CheckCircle,
+  Monitor,
+  Wrench,
+  Users,
+  Settings,
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
-  Activity
+  Activity,
+  Headphones,
+  Building,
+  Cpu,
+  Tag,
+  CheckCircle,
+  LogOut,
+  FileText,
+  ClipboardList
 } from 'lucide-react'
 import { BranchConfig } from '@/components/settings/BranchConfig'
 import { DeviceTypeConfig } from '@/components/settings/DeviceTypeConfig'
@@ -28,6 +31,173 @@ import { MakeConfig } from '@/components/settings/MakeConfig'
 import { ModelConfig } from '@/components/settings/ModelConfig'
 import { StatusConfig } from '@/components/settings/StatusConfig'
 import { AssetsManagement } from '@/components/assets/AssetsManagement'
+import { HardwareManagement } from '@/components/hardware/HardwareManagement'
+import { SupportManagement } from '@/components/support/SupportManagement'
+
+// Placeholder components for reports
+const IssueNotesContent = () => (
+  <div className="p-6">
+    <h2 className="text-2xl font-bold mb-4">Issue Notes</h2>
+    <div className="bg-white rounded-lg shadow p-6">
+      <p className="text-gray-600">Issue Notes functionality coming soon...</p>
+    </div>
+  </div>
+)
+
+const RepairFormContent = () => {
+  const [formData, setFormData] = useState({
+    date: '',
+    assetTag: '',
+    problem: '',
+    technician: '',
+    partsUsed: '',
+    cost: '',
+    status: 'pending',
+    notes: ''
+  })
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    console.log('Repair form submitted:', formData)
+    // Handle form submission logic here
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  return (
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-6">Repair Form</h2>
+      <div className="bg-white rounded-lg shadow p-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left Column */}
+            <div className="space-y-4">
+              {/* Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">DATE</label>
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => handleInputChange('date', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              {/* Asset Tag */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">ASSET TAG</label>
+                <input
+                  type="text"
+                  value={formData.assetTag}
+                  onChange={(e) => handleInputChange('assetTag', e.target.value)}
+                  placeholder="Enter asset tag"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              {/* Problem */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">PROBLEM</label>
+                <textarea
+                  value={formData.problem}
+                  onChange={(e) => handleInputChange('problem', e.target.value)}
+                  placeholder="Describe the problem"
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              {/* Technician */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">TECHNICIAN</label>
+                <input
+                  type="text"
+                  value={formData.technician}
+                  onChange={(e) => handleInputChange('technician', e.target.value)}
+                  placeholder="Enter technician name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-4">
+              {/* Parts Used */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">PARTS USED</label>
+                <textarea
+                  value={formData.partsUsed}
+                  onChange={(e) => handleInputChange('partsUsed', e.target.value)}
+                  placeholder="List parts used"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Cost */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">COST</label>
+                <input
+                  type="number"
+                  value={formData.cost}
+                  onChange={(e) => handleInputChange('cost', e.target.value)}
+                  placeholder="Enter repair cost"
+                  step="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">STATUS</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => handleInputChange('status', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="pending">Pending</option>
+                  <option value="in-progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">NOTES</label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => handleInputChange('notes', e.target.value)}
+              placeholder="Additional notes"
+              rows={4}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Submit Button */}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className="px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Submit Repair Form
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 interface MenuItem {
   id: string
@@ -53,9 +223,26 @@ const menuItems: MenuItem[] = [
     icon: <Monitor className="h-4 w-4" />
   },
   {
-    id: 'repairs',
-    label: 'Repair Management',
-    icon: <Wrench className="h-4 w-4" />
+    id: 'support',
+    label: 'Support',
+    icon: <Headphones className="h-4 w-4" />
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: <FileText className="h-4 w-4" />,
+    children: [
+      {
+        id: 'issue-notes',
+        label: 'Issue Notes',
+        icon: <ClipboardList className="h-4 w-4" />
+      },
+      {
+        id: 'repair-form',
+        label: 'Repair Form',
+        icon: <Wrench className="h-4 w-4" />
+      }
+    ]
   },
   {
     id: 'users',
@@ -118,8 +305,12 @@ export const AdminDashboard: React.FC = () => {
         return <AssetsContent />
       case 'hardware':
         return <HardwareContent />
-      case 'repairs':
-        return <RepairsContent />
+      case 'support':
+        return <SupportContent />
+      case 'issue-notes':
+        return <IssueNotesContent />
+      case 'repair-form':
+        return <RepairFormContent />
       case 'users':
         return <UsersContent />
       case 'branches':
@@ -362,27 +553,11 @@ const DashboardContent: React.FC = () => {
 
 // Placeholder components for other pages
 const HardwareContent: React.FC = () => (
-  <Card>
-    <CardHeader>
-      <CardTitle>Hardware Management</CardTitle>
-      <CardDescription>Manage and monitor all hardware assets</CardDescription>
-    </CardHeader>
-    <CardContent>
-      <p>Hardware management content will be implemented here.</p>
-    </CardContent>
-  </Card>
+  <HardwareManagement />
 )
 
-const RepairsContent: React.FC = () => (
-  <Card>
-    <CardHeader>
-      <CardTitle>Repair Management</CardTitle>
-      <CardDescription>Track and manage repair requests</CardDescription>
-    </CardHeader>
-    <CardContent>
-      <p>Repair management content will be implemented here.</p>
-    </CardContent>
-  </Card>
+const SupportContent: React.FC = () => (
+  <SupportManagement />
 )
 
 const AssetsContent: React.FC = () => <AssetsManagement />

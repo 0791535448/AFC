@@ -49,6 +49,18 @@ interface Asset {
   notes: string
 }
 
+// Make to Models mapping
+const makeToModels: Record<string, string[]> = {
+  'Dell': ['Inspiron', 'Latitude', 'XPS', 'OptiPlex', 'Vostro'],
+  'HP': ['Pavilion', 'EliteBook', 'ProBook', 'Spectre', 'Omen'],
+  'Lenovo': ['ThinkPad', 'IdeaPad', 'Legion', 'Yoga'],
+  'Canon': ['EOS', 'PowerShot', 'Pixma', 'imageCLASS'],
+  'Epson': ['EcoTank', 'WorkForce', 'Expression', 'L'],
+  'LG': ['Gram', 'Ultra', 'V', 'G', 'OLED'],
+  'Samsung': ['Galaxy Book', 'Galaxy Tab', 'Galaxy Watch', 'Galaxy Buds'],
+  'Cisco': ['Router', 'Switch', 'Access Point', 'Firewall', 'IP Phone']
+}
+
 interface ColumnFilter {
   [key: string]: string
 }
@@ -56,7 +68,7 @@ interface ColumnFilter {
 const mockAssets: Asset[] = [
   {
     id: '1',
-    assetTag: 'ICT001',
+    assetTag: 'AFC001',
     serialNumber: 'DL123456789',
     deviceType: 'Laptop',
     make: 'Dell',
@@ -71,7 +83,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: '2',
-    assetTag: 'ICT002',
+    assetTag: 'AFC002',
     serialNumber: 'HP987654321',
     deviceType: 'Desktop',
     make: 'HP',
@@ -86,7 +98,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: '3',
-    assetTag: 'ICT003',
+    assetTag: 'AFC003',
     serialNumber: 'CN456789123',
     deviceType: 'Printer',
     make: 'Canon',
@@ -101,7 +113,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: '4',
-    assetTag: 'ICT004',
+    assetTag: 'AFC004',
     serialNumber: 'LG789456123',
     deviceType: 'Monitor',
     make: 'LG',
@@ -116,7 +128,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: '5',
-    assetTag: 'ICT005',
+    assetTag: 'AFC005',
     serialNumber: 'LN321654987',
     deviceType: 'Laptop',
     make: 'Lenovo',
@@ -131,7 +143,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: '6',
-    assetTag: 'ICT006',
+    assetTag: 'AFC006',
     serialNumber: 'EP654987321',
     deviceType: 'Printer',
     make: 'Epson',
@@ -146,7 +158,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: '7',
-    assetTag: 'ICT007',
+    assetTag: 'AFC007',
     serialNumber: 'SC987654321',
     deviceType: 'Router',
     make: 'Cisco',
@@ -161,7 +173,7 @@ const mockAssets: Asset[] = [
   },
   {
     id: '8',
-    assetTag: 'ICT008',
+    assetTag: 'AFC008',
     serialNumber: 'DL147258369',
     deviceType: 'Laptop',
     make: 'Dell',
@@ -582,16 +594,16 @@ export const AssetsManagement: React.FC = () => {
                     Add Asset
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader className="pb-6 bg-gradient-to-r from-blue-50 to-indigo-50 -mx-6 px-6 pt-6 border-b">
+                <DialogContent className="max-w-2xl bg-indigo-50 border-indigo-200">
+                  <DialogHeader className="pb-6 bg-gradient-to-r from-indigo-50 to-blue-50 -mx-6 px-6 pt-6 border-b">
                     <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-blue-600 rounded-lg">
-                        <Package className="h-6 w-6 text-white" />
+                      <div className="p-2 bg-indigo-100 rounded-lg">
+                        <Plus className="h-6 w-6 text-indigo-600" />
                       </div>
                       <div>
-                        <DialogTitle className="text-2xl font-bold text-gray-900">Add New Asset</DialogTitle>
-                        <DialogDescription className="text-gray-700 mt-1 text-base">
-                          Fill in the required information to add a new asset to the system
+                        <DialogTitle className="text-indigo-800 text-xl font-bold">Add New Asset</DialogTitle>
+                        <DialogDescription className="text-indigo-700 text-base">
+                          Enter the details for the new asset
                         </DialogDescription>
                       </div>
                     </div>
@@ -817,29 +829,31 @@ export const AssetsManagement: React.FC = () => {
 
       {/* Edit Asset Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader className="pb-6 bg-gradient-to-r from-blue-50 to-indigo-50 -mx-6 px-6 pt-6 border-b">
+        <DialogContent className="max-w-2xl bg-indigo-50 border-indigo-200">
+          <DialogHeader className="pb-6 bg-gradient-to-r from-indigo-50 to-blue-50 -mx-6 px-6 pt-6 border-b">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-blue-600 rounded-lg">
-                <Edit2 className="h-6 w-6 text-white" />
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <Edit2 className="h-6 w-6 text-indigo-600" />
               </div>
               <div>
-                <DialogTitle className="text-2xl font-bold text-gray-900">Edit Asset</DialogTitle>
-                <DialogDescription className="text-gray-700 mt-1 text-base">
-                  Update the asset information and save changes
+                <DialogTitle className="text-indigo-800 text-xl font-bold">Edit Asset</DialogTitle>
+                <DialogDescription className="text-indigo-700 text-base">
+                  Update asset information and save changes
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
           {editingAsset && (
-            <AssetForm
-              asset={editingAsset}
-              onSubmit={(asset) => handleUpdateAsset(asset as Asset)}
-              onCancel={() => {
-                setIsEditModalOpen(false)
-                setEditingAsset(null)
-              }}
-            />
+            <div className="pt-6">
+              <AssetForm
+                asset={editingAsset}
+                onSubmit={(asset) => handleUpdateAsset(asset as Asset)}
+                onCancel={() => {
+                  setIsEditModalOpen(false)
+                  setEditingAsset(null)
+                }}
+              />
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -884,13 +898,16 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Get available models based on selected make
+  const availableModels = formData.make ? makeToModels[formData.make] || [] : []
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
 
     if (!formData.assetTag.trim()) {
       newErrors.assetTag = 'Asset tag is required'
-    } else if (!/^ICT\d{3,}$/.test(formData.assetTag)) {
-      newErrors.assetTag = 'Asset tag must start with ICT followed by numbers (e.g., ICT001)'
+    } else if (!/^AFC\d{3,}$/.test(formData.assetTag)) {
+      newErrors.assetTag = 'Asset tag must start with AFC followed by numbers (e.g., AFC001)'
     }
 
     if (!formData.serialNumber.trim()) {
@@ -958,7 +975,7 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
             id="assetTag"
             value={formData.assetTag}
             onChange={(e) => handleInputChange('assetTag', e.target.value)}
-            placeholder="ICT001"
+            placeholder="AFC001"
             required
             className={errors.assetTag ? 'border-red-500' : ''}
           />
@@ -1004,7 +1021,13 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
           <Label htmlFor="make">Make *</Label>
           <Select
             value={formData.make}
-            onValueChange={(value) => handleInputChange('make', value)}
+            onValueChange={(value) => {
+              handleInputChange('make', value)
+              // Clear model when make changes
+              if (value !== formData.make) {
+                setFormData(prev => ({ ...prev, model: '' }))
+              }
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select make" />
@@ -1023,14 +1046,22 @@ const AssetForm: React.FC<AssetFormProps> = ({ asset, onSubmit, onCancel }) => {
         </div>
         <div>
           <Label htmlFor="model">Model *</Label>
-          <Input
-            id="model"
+          <Select
             value={formData.model}
-            onChange={(e) => handleInputChange('model', e.target.value)}
-            placeholder="Enter model"
-            required
-            className={errors.model ? 'border-red-500' : ''}
-          />
+            onValueChange={(value) => handleInputChange('model', value)}
+            disabled={!formData.make}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={formData.make ? "Select model" : "Select make first"} />
+            </SelectTrigger>
+            <SelectContent>
+              {availableModels.map((model) => (
+                <SelectItem key={model} value={model}>
+                  {model}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {errors.model && (
             <p className="text-red-500 text-sm mt-1">{errors.model}</p>
           )}

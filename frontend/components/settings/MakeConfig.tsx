@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,72 +28,26 @@ interface Make {
 }
 
 export const MakeConfig: React.FC = () => {
-  const [makes, setMakes] = useState<Make[]>([
-    {
-      id: 1,
-      make_name: 'Dell',
-      description: 'Dell Inc. computer hardware',
-      website: 'https://www.dell.com',
-      support_contact: 'support@dell.com',
-      is_active: true
-    },
-    {
-      id: 2,
-      make_name: 'HP',
-      description: 'Hewlett-Packard computer hardware',
-      website: 'https://www.hp.com',
-      support_contact: 'support@hp.com',
-      is_active: true
-    },
-    {
-      id: 3,
-      make_name: 'Canon',
-      description: 'Canon printing and imaging equipment',
-      website: 'https://www.canon.com',
-      support_contact: 'support@canon.com',
-      is_active: true
-    },
-    {
-      id: 4,
-      make_name: 'LG',
-      description: 'LG Electronics displays and electronics',
-      website: 'https://www.lg.com',
-      support_contact: 'support@lg.com',
-      is_active: true
-    },
-    {
-      id: 5,
-      make_name: 'Cisco',
-      description: 'Cisco networking equipment',
-      website: 'https://www.cisco.com',
-      support_contact: 'support@cisco.com',
-      is_active: true
-    },
-    {
-      id: 6,
-      make_name: 'Lenovo',
-      description: 'Lenovo computer hardware',
-      website: 'https://www.lenovo.com',
-      support_contact: 'support@lenovo.com',
-      is_active: true
-    },
-    {
-      id: 7,
-      make_name: 'Epson',
-      description: 'Epson printing equipment',
-      website: 'https://www.epson.com',
-      support_contact: 'support@epson.com',
-      is_active: true
-    },
-    {
-      id: 8,
-      make_name: 'Samsung',
-      description: 'Samsung electronics and displays',
-      website: 'https://www.samsung.com',
-      support_contact: 'support@samsung.com',
-      is_active: true
+  const [makes, setMakes] = useState<Make[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Load makes from API
+  useEffect(() => {
+    loadMakes()
+  }, [])
+
+  const loadMakes = async () => {
+    try {
+      const response = await fetch('http://localhost:8001/api/makes')
+      const data = await response.json()
+      setMakes(data.makes || [])
+    } catch (error) {
+      console.error('Error loading makes:', error)
+      setMessage('Failed to load makes')
+    } finally {
+      setLoading(false)
     }
-  ])
+  }
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formData, setFormData] = useState<Make>({
@@ -109,24 +63,45 @@ export const MakeConfig: React.FC = () => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.make_name) {
       setMessage('Make name is required')
       return
     }
 
-    if (editingId) {
-      setMakes(prev => prev.map(make => 
-        make.id === editingId ? { ...formData, id: editingId } : make
-      ))
-      setMessage('Make updated successfully')
-    } else {
-      const newMake = { ...formData, id: Date.now() }
-      setMakes(prev => [...prev, newMake])
-      setMessage('Make added successfully')
-    }
+    try {
+      let response;
+      if (editingId) {
+        response = await fetch(`http://localhost:8001/api/makes/${editingId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+        setMessage('Make updated successfully')
+      } else {
+        response = await fetch('http://localhost:8001/api/makes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+        setMessage('Make added successfully')
+      }
 
-    resetForm()
+      if (response.ok) {
+        await loadMakes() // Reload makes from API
+        resetForm()
+      } else {
+        const errorData = await response.json()
+        setMessage(errorData.detail || 'Failed to save make')
+      }
+    } catch (error) {
+      console.error('Error saving make:', error)
+      setMessage('Failed to save make')
+    }
   }
 
   const handleEdit = (make: Make) => {
@@ -136,9 +111,23 @@ export const MakeConfig: React.FC = () => {
     setMessage('')
   }
 
-  const handleDelete = (id: number) => {
-    setMakes(prev => prev.filter(make => make.id !== id))
-    setMessage('Make deleted successfully')
+  const handleDelete = async (id: number) => {
+    try {
+      const response = await fetch(`http://localhost:8001/api/makes/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        await loadMakes() // Reload makes from API
+        setMessage('Make deleted successfully')
+      } else {
+        const errorData = await response.json()
+        setMessage(errorData.detail || 'Failed to delete make')
+      }
+    } catch (error) {
+      console.error('Error deleting make:', error)
+      setMessage('Failed to delete make')
+    }
   }
 
   const resetForm = () => {

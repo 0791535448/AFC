@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,64 +28,26 @@ interface DeviceType {
 const categories = ['Computer', 'Peripheral', 'Infrastructure', 'Network', 'Storage', 'Other']
 
 export const DeviceTypeConfig: React.FC = () => {
-  const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([
-    {
-      id: 1,
-      device_type_name: 'Laptop',
-      description: 'Portable computer for mobile work',
-      category: 'Computer',
-      is_active: true
-    },
-    {
-      id: 2,
-      device_type_name: 'Desktop',
-      description: 'Desktop computer for office work',
-      category: 'Computer',
-      is_active: true
-    },
-    {
-      id: 3,
-      device_type_name: 'Printer',
-      description: 'Document printing device',
-      category: 'Peripheral',
-      is_active: true
-    },
-    {
-      id: 4,
-      device_type_name: 'Monitor',
-      description: 'Display screen for computers',
-      category: 'Peripheral',
-      is_active: true
-    },
-    {
-      id: 5,
-      device_type_name: 'Server',
-      description: 'Enterprise server equipment',
-      category: 'Infrastructure',
-      is_active: true
-    },
-    {
-      id: 6,
-      device_type_name: 'Router',
-      description: 'Network routing device',
-      category: 'Network',
-      is_active: true
-    },
-    {
-      id: 7,
-      device_type_name: 'Switch',
-      description: 'Network switching device',
-      category: 'Network',
-      is_active: true
-    },
-    {
-      id: 8,
-      device_type_name: 'Scanner',
-      description: 'Document scanning device',
-      category: 'Peripheral',
-      is_active: true
+  const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Load device types from API
+  useEffect(() => {
+    loadDeviceTypes()
+  }, [])
+
+  const loadDeviceTypes = async () => {
+    try {
+      const response = await fetch('http://localhost:8001/api/device-types')
+      const data = await response.json()
+      setDeviceTypes(data.device_types || [])
+    } catch (error) {
+      console.error('Error loading device types:', error)
+      setMessage('Failed to load device types')
+    } finally {
+      setLoading(false)
     }
-  ])
+  }
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formData, setFormData] = useState<DeviceType>({
@@ -100,24 +62,45 @@ export const DeviceTypeConfig: React.FC = () => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.device_type_name) {
       setMessage('Device type name is required')
       return
     }
 
-    if (editingId) {
-      setDeviceTypes(prev => prev.map(deviceType => 
-        deviceType.id === editingId ? { ...formData, id: editingId } : deviceType
-      ))
-      setMessage('Device type updated successfully')
-    } else {
-      const newDeviceType = { ...formData, id: Date.now() }
-      setDeviceTypes(prev => [...prev, newDeviceType])
-      setMessage('Device type added successfully')
-    }
+    try {
+      let response;
+      if (editingId) {
+        response = await fetch(`http://localhost:8001/api/device-types/${editingId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+        setMessage('Device type updated successfully')
+      } else {
+        response = await fetch('http://localhost:8001/api/device-types', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        })
+        setMessage('Device type added successfully')
+      }
 
-    resetForm()
+      if (response.ok) {
+        await loadDeviceTypes() // Reload device types from API
+        resetForm()
+      } else {
+        const errorData = await response.json()
+        setMessage(errorData.detail || 'Failed to save device type')
+      }
+    } catch (error) {
+      console.error('Error saving device type:', error)
+      setMessage('Failed to save device type')
+    }
   }
 
   const handleEdit = (deviceType: DeviceType) => {
@@ -127,9 +110,23 @@ export const DeviceTypeConfig: React.FC = () => {
     setMessage('')
   }
 
-  const handleDelete = (id: number) => {
-    setDeviceTypes(prev => prev.filter(deviceType => deviceType.id !== id))
-    setMessage('Device type deleted successfully')
+  const handleDelete = async (id: number) => {
+    try {
+      const response = await fetch(`http://localhost:8001/api/device-types/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        await loadDeviceTypes() // Reload device types from API
+        setMessage('Device type deleted successfully')
+      } else {
+        const errorData = await response.json()
+        setMessage(errorData.detail || 'Failed to delete device type')
+      }
+    } catch (error) {
+      console.error('Error deleting device type:', error)
+      setMessage('Failed to delete device type')
+    }
   }
 
   const resetForm = () => {
