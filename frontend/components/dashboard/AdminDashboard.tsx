@@ -30,7 +30,7 @@ import { DeviceTypeConfig } from '@/components/settings/DeviceTypeConfig'
 import { MakeConfig } from '@/components/settings/MakeConfig'
 import { ModelConfig } from '@/components/settings/ModelConfig'
 import { StatusConfig } from '@/components/settings/StatusConfig'
-import { AssetsManagement } from '@/components/assets/AssetsManagement'
+import { AssetsManagementClean } from '@/components/assets/AssetsManagementClean'
 import { HardwareManagement } from '@/components/hardware/HardwareManagement'
 import { SupportManagement } from '@/components/support/SupportManagement'
 
@@ -560,7 +560,7 @@ const SupportContent: React.FC = () => (
   <SupportManagement />
 )
 
-const AssetsContent: React.FC = () => <AssetsManagement />
+const AssetsContent: React.FC = () => <AssetsManagementClean />
 
 const UsersContent: React.FC = () => (
   <Card>

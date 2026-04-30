@@ -295,7 +295,7 @@ async def get_hardware(current_user: dict = Depends(get_current_active_user)):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM hardware_register ORDER BY created_at DESC")
+        cursor.execute("SELECT * FROM hardware_register WHERE is_active = TRUE ORDER BY created_at DESC")
         hardware = cursor.fetchall()
         return hardware
     finally:
@@ -311,13 +311,13 @@ async def create_hardware(hardware: HardwareItem, current_user: dict = Depends(g
         query = """
         INSERT INTO hardware_register 
         (asset_tag, device_type, make, model, serial_number, purchase_date, 
-         warranty_expiry, status, location, assigned_to, created_at, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+         warranty_expiry, status, location, assigned_to, is_active, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         values = (
             hardware.asset_tag, hardware.device_type, hardware.make, hardware.model,
             hardware.serial_number, hardware.purchase_date, hardware.warranty_expiry,
-            hardware.status, hardware.location, hardware.assigned_to,
+            hardware.status, hardware.location, hardware.assigned_to, True,
             datetime.now(), datetime.now()
         )
         cursor.execute(query, values)
@@ -367,6 +367,147 @@ async def create_repair(repair: RepairRecord, current_user: dict = Depends(get_c
         cursor.close()
         conn.close()
 
+@app.delete("/hardware/{hardware_id}")
+async def delete_hardware(hardware_id: int, current_user: dict = Depends(get_current_active_user)):
+    """Delete hardware item (soft delete)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE hardware_register SET is_active = FALSE WHERE id = %s", (hardware_id,))
+        conn.commit()
+        return {"message": "Hardware item deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Assets endpoints (protected)
+@app.get("/assets", response_model=List[dict])
+async def get_assets(current_user: dict = Depends(get_current_active_user)):
+    """Get all assets"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM assets WHERE is_active = TRUE ORDER BY created_at DESC")
+        assets = cursor.fetchall()
+        return assets
+    finally:
+        cursor.close()
+        conn.close()
+
+# Development endpoint - no auth required (for testing)
+@app.get("/dev/assets", response_model=List[dict])
+async def get_assets_dev():
+    """Get all assets - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM assets WHERE is_active = TRUE ORDER BY created_at DESC")
+        assets = cursor.fetchall()
+        return assets
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/dev/assets", response_model=dict)
+async def create_asset_dev(asset: dict):
+    """Create new asset - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        query = """
+        INSERT INTO assets 
+        (asset_code, asset_name, asset_category, asset_type, brand, serial_number, 
+         location, assigned_user, asset_status, notes, barcode, qr_code, is_active, created_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (
+            asset.get('asset_code', ''),
+            asset.get('asset_name', ''),
+            asset.get('asset_category', ''),
+            asset.get('asset_type', ''),
+            asset.get('brand', ''),
+            asset.get('serial_number', ''),
+            asset.get('location', ''),
+            asset.get('assigned_user', ''),
+            asset.get('asset_status', 'Active'),
+            asset.get('notes', ''),
+            asset.get('barcode', ''),
+            asset.get('qr_code', ''),
+            True,
+            1  # Default created_by for development
+        ))
+        conn.commit()
+        return {"message": "Asset created successfully", "asset_id": cursor.lastrowid}
+    except mysql.connector.Error as err:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(err))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/assets", response_model=dict)
+async def create_asset(asset: dict, current_user: dict = Depends(get_current_active_user)):
+    """Create new asset"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        query = """
+        INSERT INTO assets 
+        (asset_code, asset_name, asset_category, asset_type, brand, serial_number, 
+         location, assigned_user, asset_status, notes, barcode, qr_code, is_active, created_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (
+            asset.get('asset_code', ''),
+            asset.get('asset_name', ''),
+            asset.get('asset_category', ''),
+            asset.get('asset_type', ''),
+            asset.get('brand', ''),
+            asset.get('serial_number', ''),
+            asset.get('location', ''),
+            asset.get('assigned_user', ''),
+            asset.get('asset_status', 'Active'),
+            asset.get('notes', ''),
+            asset.get('barcode', ''),
+            asset.get('qr_code', ''),
+            True,
+            current_user['id']
+        ))
+        conn.commit()
+        return {"message": "Asset created successfully", "asset_id": cursor.lastrowid}
+    except mysql.connector.Error as err:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(err))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/dev/assets/{asset_id}")
+async def delete_asset_dev(asset_id: int):
+    """Delete asset (soft delete) - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE assets SET is_active = FALSE WHERE id = %s", (asset_id,))
+        conn.commit()
+        return {"message": "Asset deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/assets/{asset_id}")
+async def delete_asset(asset_id: int, current_user: dict = Depends(get_current_active_user)):
+    """Delete asset (soft delete)"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE assets SET is_active = FALSE WHERE id = %s", (asset_id,))
+        conn.commit()
+        return {"message": "Asset deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
 # Asset Movement endpoints (protected)
 @app.get("/asset-movements", response_model=List[AssetMovement])
 async def get_asset_movements(current_user: dict = Depends(get_current_active_user)):
@@ -406,13 +547,27 @@ async def create_asset_movement(movement: AssetMovement, current_user: dict = De
 
 # Settings API Endpoints
 
-# Branches API
+# Branches API (Development - no auth)
+@app.get("/dev/branches")
+async def get_branches_dev():
+    """Get all branches - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM branches WHERE is_active = TRUE ORDER BY branch_name")
+        branches = cursor.fetchall()
+        return {"branches": branches}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Branches API (Protected)
 @app.get("/api/branches")
 async def get_branches():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM branches_data WHERE is_active = TRUE ORDER BY branch_name")
+        cursor.execute("SELECT * FROM branches WHERE is_active = TRUE ORDER BY branch_name")
         branches = cursor.fetchall()
         return {"branches": branches}
     finally:
@@ -425,7 +580,7 @@ async def create_branch(branch: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO branches_data (branch_name, branch_code, location_address, contact_person, contact_phone, is_active)
+            INSERT INTO branches (branch_name, branch_code, location_address, contact_person, contact_phone, is_active)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (branch.get('branch_name'), branch.get('branch_code'), branch.get('location_address'), 
               branch.get('contact_person'), branch.get('contact_phone'), branch.get('is_active', True)))
@@ -442,7 +597,7 @@ async def update_branch(branch_id: int, branch: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            UPDATE branches_data 
+            UPDATE branches 
             SET branch_name = %s, branch_code = %s, location_address = %s, 
                 contact_person = %s, contact_phone = %s, is_active = %s
             WHERE id = %s
@@ -459,20 +614,34 @@ async def delete_branch(branch_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE branches_data SET is_active = FALSE WHERE id = %s", (branch_id,))
+        cursor.execute("UPDATE branches SET is_active = FALSE WHERE id = %s", (branch_id,))
         conn.commit()
         return {"message": "Branch deleted successfully"}
     finally:
         cursor.close()
         conn.close()
 
-# Device Types API
+# Device Types API (Development - no auth)
+@app.get("/dev/device-types")
+async def get_device_types_dev():
+    """Get all device types - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM device_types WHERE is_active = TRUE ORDER BY device_type_name")
+        device_types = cursor.fetchall()
+        return {"device_types": device_types}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Device Types API (Protected)
 @app.get("/api/device-types")
 async def get_device_types():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM device_types_data WHERE is_active = TRUE ORDER BY device_type_name")
+        cursor.execute("SELECT * FROM device_types WHERE is_active = TRUE ORDER BY device_type_name")
         device_types = cursor.fetchall()
         return {"device_types": device_types}
     finally:
@@ -485,7 +654,7 @@ async def create_device_type(device_type: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO device_types_data (device_type_name, description, category, is_active)
+            INSERT INTO device_types (device_type_name, description, category, is_active)
             VALUES (%s, %s, %s, %s)
         """, (device_type.get('device_type_name'), device_type.get('description'), 
               device_type.get('category'), device_type.get('is_active', True)))
@@ -502,7 +671,7 @@ async def update_device_type(device_type_id: int, device_type: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            UPDATE device_types_data 
+            UPDATE device_types 
             SET device_type_name = %s, description = %s, category = %s, is_active = %s
             WHERE id = %s
         """, (device_type.get('device_type_name'), device_type.get('description'), 
@@ -518,20 +687,34 @@ async def delete_device_type(device_type_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE device_types_data SET is_active = FALSE WHERE id = %s", (device_type_id,))
+        cursor.execute("UPDATE device_types SET is_active = FALSE WHERE id = %s", (device_type_id,))
         conn.commit()
         return {"message": "Device type deleted successfully"}
     finally:
         cursor.close()
         conn.close()
 
-# Makes API
+# Makes API (Development - no auth)
+@app.get("/dev/makes")
+async def get_makes_dev():
+    """Get all hardware makes - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM hardware_makes WHERE is_active = TRUE ORDER BY make_name")
+        makes = cursor.fetchall()
+        return {"makes": makes}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Makes API (Protected)
 @app.get("/api/makes")
 async def get_makes():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM hardware_makes_data WHERE is_active = TRUE ORDER BY make_name")
+        cursor.execute("SELECT * FROM hardware_makes WHERE is_active = TRUE ORDER BY make_name")
         makes = cursor.fetchall()
         return {"makes": makes}
     finally:
@@ -544,7 +727,7 @@ async def create_make(make: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO hardware_makes_data (make_name, description, website, support_contact, is_active)
+            INSERT INTO hardware_makes (make_name, description, website, support_contact, is_active)
             VALUES (%s, %s, %s, %s, %s)
         """, (make.get('make_name'), make.get('description'), make.get('website'), 
               make.get('support_contact'), make.get('is_active', True)))
@@ -561,7 +744,7 @@ async def update_make(make_id: int, make: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            UPDATE hardware_makes_data 
+            UPDATE hardware_makes 
             SET make_name = %s, description = %s, website = %s, support_contact = %s, is_active = %s
             WHERE id = %s
         """, (make.get('make_name'), make.get('description'), make.get('website'), 
@@ -577,14 +760,35 @@ async def delete_make(make_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE hardware_makes_data SET is_active = FALSE WHERE id = %s", (make_id,))
+        cursor.execute("UPDATE hardware_makes SET is_active = FALSE WHERE id = %s", (make_id,))
         conn.commit()
         return {"message": "Make deleted successfully"}
     finally:
         cursor.close()
         conn.close()
 
-# Models API
+# Models API (Development - no auth)
+@app.get("/dev/models")
+async def get_models_dev():
+    """Get all hardware models - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT m.*, hm.make_name, dt.device_type_name 
+            FROM hardware_models m
+            JOIN hardware_makes hm ON m.make_id = hm.id
+            JOIN device_types dt ON m.device_type_id = dt.id
+            WHERE m.is_active = TRUE 
+            ORDER BY m.model_name
+        """)
+        models = cursor.fetchall()
+        return {"models": models}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Models API (Protected)
 @app.get("/api/models")
 async def get_models():
     conn = get_db_connection()
@@ -592,9 +796,9 @@ async def get_models():
     try:
         cursor.execute("""
             SELECT m.*, hm.make_name, dt.device_type_name 
-            FROM hardware_models_data m
-            JOIN hardware_makes_data hm ON m.make_id = hm.id
-            JOIN device_types_data dt ON m.device_type_id = dt.id
+            FROM hardware_models m
+            JOIN hardware_makes hm ON m.make_id = hm.id
+            JOIN device_types dt ON m.device_type_id = dt.id
             WHERE m.is_active = TRUE 
             ORDER BY m.model_name
         """)
@@ -610,7 +814,7 @@ async def create_model(model: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO hardware_models_data (model_name, make_id, device_type_id, specifications, release_year, is_active)
+            INSERT INTO hardware_models (model_name, make_id, device_type_id, specifications, release_year, is_active)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (model.get('model_name'), model.get('make_id'), model.get('device_type_id'), 
               model.get('specifications'), model.get('release_year'), model.get('is_active', True)))
@@ -627,7 +831,7 @@ async def update_model(model_id: int, model: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            UPDATE hardware_models_data 
+            UPDATE hardware_models 
             SET model_name = %s, make_id = %s, device_type_id = %s, specifications = %s, release_year = %s, is_active = %s
             WHERE id = %s
         """, (model.get('model_name'), model.get('make_id'), model.get('device_type_id'), 
@@ -643,20 +847,34 @@ async def delete_model(model_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE hardware_models_data SET is_active = FALSE WHERE id = %s", (model_id,))
+        cursor.execute("UPDATE hardware_models SET is_active = FALSE WHERE id = %s", (model_id,))
         conn.commit()
         return {"message": "Model deleted successfully"}
     finally:
         cursor.close()
         conn.close()
 
-# Statuses API
+# Statuses API (Development - no auth)
+@app.get("/dev/statuses")
+async def get_statuses_dev():
+    """Get all hardware statuses - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM hardware_status WHERE is_active = TRUE ORDER BY status_name")
+        statuses = cursor.fetchall()
+        return {"statuses": statuses}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Statuses API (Protected)
 @app.get("/api/statuses")
 async def get_statuses():
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT * FROM hardware_status_data WHERE is_active = TRUE ORDER BY status_name")
+        cursor.execute("SELECT * FROM hardware_status WHERE is_active = TRUE ORDER BY status_name")
         statuses = cursor.fetchall()
         return {"statuses": statuses}
     finally:
@@ -669,7 +887,7 @@ async def create_status(status: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO hardware_status_data (status_name, description, color_code, is_active)
+            INSERT INTO hardware_status (status_name, description, color_code, is_active)
             VALUES (%s, %s, %s, %s)
         """, (status.get('status_name'), status.get('description'), 
               status.get('color_code'), status.get('is_active', True)))
@@ -686,7 +904,7 @@ async def update_status(status_id: int, status: dict):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            UPDATE hardware_status_data 
+            UPDATE hardware_status 
             SET status_name = %s, description = %s, color_code = %s, is_active = %s
             WHERE id = %s
         """, (status.get('status_name'), status.get('description'), 
@@ -702,7 +920,7 @@ async def delete_status(status_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE hardware_status_data SET is_active = FALSE WHERE id = %s", (status_id,))
+        cursor.execute("UPDATE hardware_status SET is_active = FALSE WHERE id = %s", (status_id,))
         conn.commit()
         return {"message": "Status deleted successfully"}
     finally:

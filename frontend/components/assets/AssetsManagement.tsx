@@ -30,23 +30,40 @@ import {
   FileSpreadsheet,
   FileText
 } from 'lucide-react'
-import { MassUpload } from './MassUpload'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { NewAssetForm } from './NewAssetForm'
+import axios from 'axios'
 
 interface Asset {
-  id: string
-  assetTag: string
-  serialNumber: string
-  deviceType: string
-  make: string
-  model: string
-  status: string
+  id: number
+  asset_code: string
+  asset_name: string
+  asset_category: string
+  asset_type: string
+  brand: string
+  serial_number: string
+  model_number: string
+  purchase_date: string
+  purchase_cost: number
+  current_value: number
+  depreciation_rate: number
+  warranty_start: string
+  warranty_end: string
+  maintenance_contract: boolean
+  contract_expiry: string
   location: string
-  assignedTo: string
-  purchaseDate: string
-  warrantyExpiry: string
-  purchaseCost: number
+  department: string
+  assigned_user: string
+  asset_status: string
+  condition_rating: string
+  last_inspection: string
+  next_inspection: string
   notes: string
+  barcode: string
+  qr_code: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 // Make to Models mapping
@@ -65,162 +82,19 @@ interface ColumnFilter {
   [key: string]: string
 }
 
-const mockAssets: Asset[] = [
-  {
-    id: '1',
-    assetTag: 'AFC001',
-    serialNumber: 'DL123456789',
-    deviceType: 'Laptop',
-    make: 'Dell',
-    model: 'Latitude 7420',
-    status: 'Active',
-    location: 'IT Department',
-    assignedTo: 'John Doe',
-    purchaseDate: '2023-01-15',
-    warrantyExpiry: '2025-01-15',
-    purchaseCost: 1200,
-    notes: 'Primary work laptop'
-  },
-  {
-    id: '2',
-    assetTag: 'AFC002',
-    serialNumber: 'HP987654321',
-    deviceType: 'Desktop',
-    make: 'HP',
-    model: 'EliteDesk 800',
-    status: 'Active',
-    location: 'Finance',
-    assignedTo: 'Jane Smith',
-    purchaseDate: '2023-02-20',
-    warrantyExpiry: '2025-02-20',
-    purchaseCost: 800,
-    notes: 'Finance department workstation'
-  },
-  {
-    id: '3',
-    assetTag: 'AFC003',
-    serialNumber: 'CN456789123',
-    deviceType: 'Printer',
-    make: 'Canon',
-    model: 'IR-ADV 4535',
-    status: 'Under Repair',
-    location: 'Head Office',
-    assignedTo: 'Shared',
-    purchaseDate: '2022-11-10',
-    warrantyExpiry: '2024-11-10',
-    purchaseCost: 2500,
-    notes: 'Multi-function printer - paper jam issue'
-  },
-  {
-    id: '4',
-    assetTag: 'AFC004',
-    serialNumber: 'LG789456123',
-    deviceType: 'Monitor',
-    make: 'LG',
-    model: '27UL850',
-    status: 'Active',
-    location: 'IT Department',
-    assignedTo: 'Mike Johnson',
-    purchaseDate: '2023-03-05',
-    warrantyExpiry: '2025-03-05',
-    purchaseCost: 400,
-    notes: '4K monitor for development'
-  },
-  {
-    id: '5',
-    assetTag: 'AFC005',
-    serialNumber: 'LN321654987',
-    deviceType: 'Laptop',
-    make: 'Lenovo',
-    model: 'ThinkPad X1 Carbon',
-    status: 'Active',
-    location: 'Management',
-    assignedTo: 'Sarah Wilson',
-    purchaseDate: '2023-04-12',
-    warrantyExpiry: '2025-04-12',
-    purchaseCost: 1500,
-    notes: 'Executive laptop'
-  },
-  {
-    id: '6',
-    assetTag: 'AFC006',
-    serialNumber: 'EP654987321',
-    deviceType: 'Printer',
-    make: 'Epson',
-    model: 'EcoTank L3150',
-    status: 'Active',
-    location: 'Reception',
-    assignedTo: 'Shared',
-    purchaseDate: '2023-05-18',
-    warrantyExpiry: '2025-05-18',
-    purchaseCost: 300,
-    notes: 'Reception area printer'
-  },
-  {
-    id: '7',
-    assetTag: 'AFC007',
-    serialNumber: 'SC987654321',
-    deviceType: 'Router',
-    make: 'Cisco',
-    model: 'Catalyst 2960',
-    status: 'Active',
-    location: 'IT Department',
-    assignedTo: 'Network Team',
-    purchaseDate: '2022-09-15',
-    warrantyExpiry: '2024-09-15',
-    purchaseCost: 1200,
-    notes: 'Main network switch'
-  },
-  {
-    id: '8',
-    assetTag: 'AFC008',
-    serialNumber: 'DL147258369',
-    deviceType: 'Laptop',
-    make: 'Dell',
-    model: 'Latitude 7420',
-    status: 'Retired',
-    location: 'Storage',
-    assignedTo: 'Unassigned',
-    purchaseDate: '2021-06-20',
-    warrantyExpiry: '2023-06-20',
-    purchaseCost: 1000,
-    notes: 'Retired due to age'
-  },
-  {
-    id: '9',
-    assetTag: 'ICT009',
-    serialNumber: 'SS852147963',
-    deviceType: 'Laptop',
-    make: 'Samsung',
-    model: 'Galaxy Book Pro',
-    status: 'Active',
-    location: 'Sales',
-    assignedTo: 'Tom Brown',
-    purchaseDate: '2023-07-25',
-    warrantyExpiry: '2025-07-25',
-    purchaseCost: 1100,
-    notes: 'Sales team laptop'
-  },
-  {
-    id: '10',
-    assetTag: 'ICT010',
-    serialNumber: 'DL369258147',
-    deviceType: 'Desktop',
-    make: 'Dell',
-    model: 'OptiPlex 5000',
-    status: 'Active',
-    location: 'IT Department',
-    assignedTo: 'Development Team',
-    purchaseDate: '2023-08-30',
-    warrantyExpiry: '2025-08-30',
-    purchaseCost: 900,
-    notes: 'Development workstation'
-  }
+// Asset categories for dropdown
+const assetCategories = [
+  'Computer', 'Office Equipment', 'Network Equipment', 'Display Equipment', 
+  'Storage', 'Peripheral', 'Mobile Device', 'Server', 'Other'
 ]
 
+const assetConditions = ['Excellent', 'Good', 'Fair', 'Poor']
+const assetStatuses = ['Active', 'Inactive', 'Under Maintenance', 'Retired', 'Lost', 'Stolen']
+
 export const AssetsManagement: React.FC = () => {
-  const [assets, setAssets] = useState<Asset[]>(mockAssets)
-  const [filteredAssets, setFilteredAssets] = useState<Asset[]>(mockAssets)
+  const [assets, setAssets] = useState<Asset[]>([])
+  const [filteredAssets, setFilteredAssets] = useState<Asset[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [columnFilters, setColumnFilters] = useState<ColumnFilter>({})
   const [currentPage, setCurrentPage] = useState(1)
@@ -234,15 +108,41 @@ export const AssetsManagement: React.FC = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [assetToDelete, setAssetToDelete] = useState<string | null>(null)
 
+  const API_BASE_URL = 'http://localhost:8001'
+
+  // Fetch assets from API
+  const fetchAssets = async () => {
+    try {
+      setLoading(true)
+      const response = await axios.get(`${API_BASE_URL}/assets`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'test-token'}`
+        }
+      })
+      setAssets(response.data)
+      setFilteredAssets(response.data)
+    } catch (error) {
+      console.error('Error fetching assets:', error)
+      setMessage('Error loading assets')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAssets()
+  }, [])
+
   // Calculate statistics
   const stats = useMemo(() => {
     const total = assets.length
-    const active = assets.filter(a => a.status === 'Active').length
-    const underRepair = assets.filter(a => a.status === 'Under Repair').length
-    const retired = assets.filter(a => a.status === 'Retired').length
-    const totalValue = assets.reduce((sum, a) => sum + a.purchaseCost, 0)
+    const active = assets.filter(a => a.asset_status === 'Active').length
+    const underMaintenance = assets.filter(a => a.asset_status === 'Under Maintenance').length
+    const retired = assets.filter(a => a.asset_status === 'Retired').length
+    const totalValue = assets.reduce((sum, a) => sum + (a.purchase_cost || 0), 0)
 
-    return { total, active, underRepair, retired, totalValue }
+    return { total, active, underMaintenance, retired, totalValue }
   }, [assets])
 
   // Apply filters and search
@@ -306,57 +206,40 @@ export const AssetsManagement: React.FC = () => {
     }))
   }
 
-  const handleAddAsset = (newAsset: Omit<Asset, 'id'>) => {
-    // Check for duplicate asset tag
-    const existingAsset = assets.find(asset => asset.assetTag.toLowerCase() === newAsset.assetTag.toLowerCase())
-    if (existingAsset) {
-      setMessage(`Asset with tag "${newAsset.assetTag}" already exists`)
-      setTimeout(() => setMessage(''), 5000)
-      return
+  const handleAddAsset = async (newAsset: any) => {
+    try {
+      // Add missing required fields
+      const assetData = {
+        ...newAsset,
+        is_active: true
+      }
+      
+      const response = await axios.post(`${API_BASE_URL}/assets`, assetData, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || 'test-token'}`
+        }
+      })
+      
+      // Refresh assets list
+      await fetchAssets()
+      
+      setMessage('Asset added successfully')
+      setIsAddModalOpen(false)
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Error adding asset:', error)
+      setMessage('Error adding asset')
+      setTimeout(() => setMessage(''), 3000)
     }
+  }
 
-    const asset: Asset = {
-      ...newAsset,
-      id: (assets.length + 1).toString()
-    }
-    setAssets(prev => [...prev, asset])
-    setMessage('Asset added successfully')
-    setIsAddModalOpen(false)
+  const handleUpdateAsset = async (updatedAsset: Asset) => {
+    // For now, just show message - update endpoint would need to be implemented
+    setMessage('Asset update functionality coming soon')
     setTimeout(() => setMessage(''), 3000)
   }
 
-  const handleMassUpload = (newAssets: Omit<Asset, 'id'>[]) => {
-    const assetsWithIds: Asset[] = newAssets.map((asset, index) => ({
-      ...asset,
-      id: (assets.length + index + 1).toString()
-    }))
-    setAssets(prev => [...prev, ...assetsWithIds])
-    setMessage(`${assetsWithIds.length} assets uploaded successfully`)
-    setTimeout(() => setMessage(''), 3000)
-  }
-
-  const handleUpdateAsset = (updatedAsset: Asset) => {
-    // Check for duplicate asset tag (excluding current asset)
-    const existingAsset = assets.find(asset => 
-      asset.assetTag.toLowerCase() === updatedAsset.assetTag.toLowerCase() && 
-      asset.id !== updatedAsset.id
-    )
-    if (existingAsset) {
-      setMessage(`Asset with tag "${updatedAsset.assetTag}" already exists`)
-      setTimeout(() => setMessage(''), 5000)
-      return
-    }
-
-    setAssets(prev => prev.map(asset => 
-      asset.id === updatedAsset.id ? updatedAsset : asset
-    ))
-    setMessage('Asset updated successfully')
-    setIsEditModalOpen(false)
-    setEditingAsset(null)
-    setTimeout(() => setMessage(''), 3000)
-  }
-
-  const handleDeleteAsset = (id: string) => {
+  const handleDeleteAsset = (id: number) => {
     const asset = assets.find(a => a.id === id)
     if (asset) {
       setAssetToDelete(id)
@@ -364,12 +247,27 @@ export const AssetsManagement: React.FC = () => {
     }
   }
 
-  const confirmDeleteAsset = () => {
+  const confirmDeleteAsset = async () => {
     if (assetToDelete) {
-      setAssets(prev => prev.filter(asset => asset.id !== assetToDelete))
-      setMessage('Asset deleted successfully')
-      setTimeout(() => setMessage(''), 3000)
-      setAssetToDelete(null)
+      try {
+        await axios.delete(`${API_BASE_URL}/assets/${assetToDelete}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token') || 'test-token'}`
+          }
+        })
+        
+        // Refresh assets list
+        await fetchAssets()
+        
+        setMessage('Asset deleted successfully')
+        setTimeout(() => setMessage(''), 3000)
+        setAssetToDelete(null)
+        setDeleteConfirmOpen(false)
+      } catch (error) {
+        console.error('Error deleting asset:', error)
+        setMessage('Error deleting asset')
+        setTimeout(() => setMessage(''), 3000)
+      }
     }
   }
 
@@ -483,6 +381,14 @@ export const AssetsManagement: React.FC = () => {
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg">Loading assets...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {message && (
@@ -521,8 +427,8 @@ export const AssetsManagement: React.FC = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Under Repair</p>
-                <p className="text-2xl font-bold text-orange-600">{stats.underRepair}</p>
+                <p className="text-sm font-medium text-gray-600">Under Maintenance</p>
+                <p className="text-2xl font-bold text-orange-600">{stats.underMaintenance}</p>
               </div>
               <Wrench className="h-8 w-8 text-orange-600" />
             </div>
@@ -586,8 +492,11 @@ export const AssetsManagement: React.FC = () => {
                 <FileText className="h-4 w-4 mr-2" />
                 Export PDF
               </Button>
-              <MassUpload onAssetsUploaded={handleMassUpload} />
-              <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+              <Button onClick={fetchAssets}>
+                <Plus className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+                            <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                 <DialogTrigger asChild>
                   <Button>
                     <Plus className="h-4 w-4 mr-2" />
@@ -609,7 +518,7 @@ export const AssetsManagement: React.FC = () => {
                     </div>
                   </DialogHeader>
                   <div className="pt-6">
-                    <AssetForm onSubmit={handleAddAsset} onCancel={() => setIsAddModalOpen(false)} />
+                    <NewAssetForm onSubmit={handleAddAsset} onCancel={() => setIsAddModalOpen(false)} />
                   </div>
                 </DialogContent>
               </Dialog>
@@ -689,73 +598,88 @@ export const AssetsManagement: React.FC = () => {
               <thead>
                 <tr className="border-b">
                   <th className="text-left p-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('assetTag')}>
-                      Asset Tag
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('asset_code')}>
+                      Code
                       <ArrowUpDown className="h-3 w-3 ml-1" />
                     </Button>
                   </th>
                   <th className="text-left p-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('serialNumber')}>
-                      Serial Number
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('asset_name')}>
+                      Asset Name
                       <ArrowUpDown className="h-3 w-3 ml-1" />
                     </Button>
                   </th>
                   <th className="text-left p-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('deviceType')}>
-                      Device Type
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('asset_category')}>
+                      Category
                       <ArrowUpDown className="h-3 w-3 ml-1" />
                     </Button>
                   </th>
                   <th className="text-left p-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('make')}>
-                      Make
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('brand')}>
+                      Brand
                       <ArrowUpDown className="h-3 w-3 ml-1" />
                     </Button>
                   </th>
                   <th className="text-left p-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('model')}>
-                      Model
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('assigned_user')}>
+                      Assigned To
                       <ArrowUpDown className="h-3 w-3 ml-1" />
                     </Button>
                   </th>
                   <th className="text-left p-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('status')}>
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('asset_status')}>
                       Status
                       <ArrowUpDown className="h-3 w-3 ml-1" />
                     </Button>
                   </th>
                   <th className="text-left p-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('location')}>
-                      Location
+                    <Button variant="ghost" size="sm" onClick={() => handleSort('condition_rating')}>
+                      Condition
                       <ArrowUpDown className="h-3 w-3 ml-1" />
                     </Button>
                   </th>
-                  <th className="text-left p-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleSort('assignedTo')}>
-                      Assigned To
-                      <ArrowUpDown className="h-3 w-3 ml-1" />
-                    </Button>
-                  </th>
-                  <th className="text-left p-2">Purchase Cost</th>
+                  <th className="text-left p-2">Value</th>
                   <th className="text-left p-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedAssets.map((asset) => (
                   <tr key={asset.id} className="border-b hover:bg-gray-50">
-                    <td className="p-2 font-medium">{asset.assetTag}</td>
-                    <td className="p-2">{asset.serialNumber}</td>
-                    <td className="p-2">{asset.deviceType}</td>
-                    <td className="p-2">{asset.make}</td>
-                    <td className="p-2">{asset.model}</td>
+                    <td className="p-2 font-medium">{asset.asset_code}</td>
                     <td className="p-2">
-                      <Badge className={getStatusColor(asset.status)}>
-                        {asset.status}
+                      <div className="max-w-xs">
+                        <div className="font-medium">{asset.asset_name}</div>
+                        <div className="text-xs text-gray-500">{asset.serial_number}</div>
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      <Badge variant="outline" className="text-xs">
+                        {asset.asset_category}
                       </Badge>
                     </td>
-                    <td className="p-2">{asset.location}</td>
-                    <td className="p-2">{asset.assignedTo}</td>
-                    <td className="p-2">${asset.purchaseCost}</td>
+                    <td className="p-2">{asset.brand}</td>
+                    <td className="p-2">{asset.assigned_user || 'Unassigned'}</td>
+                    <td className="p-2">
+                      <Badge className={getStatusColor(asset.asset_status)}>
+                        {asset.asset_status}
+                      </Badge>
+                    </td>
+                    <td className="p-2">
+                      <Badge variant={asset.condition_rating === 'Excellent' ? 'default' : 'secondary'} className="text-xs">
+                        {asset.condition_rating}
+                      </Badge>
+                    </td>
+                    <td className="p-2">
+                      <div className="text-right">
+                        <div className="font-medium">${asset.current_value || asset.purchase_cost}</div>
+                        {asset.current_value && asset.current_value !== asset.purchase_cost && (
+                          <div className="text-xs text-gray-500">
+                            {((asset.current_value / asset.purchase_cost) * 100).toFixed(0)}% of original
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-2">
                       <div className="flex space-x-2">
                         <Button
