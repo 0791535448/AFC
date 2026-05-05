@@ -482,6 +482,43 @@ async def create_asset(asset: dict, current_user: dict = Depends(get_current_act
         cursor.close()
         conn.close()
 
+@app.put("/dev/assets/{asset_id}")
+async def update_asset_dev(asset_id: int, asset: dict):
+    """Update asset - development endpoint without authentication"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Build dynamic UPDATE query based on provided fields
+        update_fields = []
+        values = []
+        
+        # Only update fields that are provided in request
+        for field, value in asset.items():
+            if field in ['asset_code', 'asset_name', 'asset_category', 'asset_type', 'brand', 
+                        'serial_number', 'model_number', 'location', 'department', 'assigned_user', 
+                        'asset_status', 'notes']:
+                update_fields.append(f"{field} = %s")
+                values.append(value)
+        
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        
+        # Add updated_at timestamp
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        values.append(asset_id)  # Add asset_id for WHERE clause
+        
+        query = f"UPDATE assets SET {', '.join(update_fields)} WHERE id = %s"
+        cursor.execute(query, values)
+        conn.commit()
+        
+        return {"message": "Asset updated successfully"}
+    except mysql.connector.Error as err:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(err))
+    finally:
+        cursor.close()
+        conn.close()
+
 @app.delete("/dev/assets/{asset_id}")
 async def delete_asset_dev(asset_id: int):
     """Delete asset (soft delete) - development endpoint without authentication"""
@@ -923,6 +960,91 @@ async def delete_status(status_id: int):
         cursor.execute("UPDATE hardware_status SET is_active = FALSE WHERE id = %s", (status_id,))
         conn.commit()
         return {"message": "Status deleted successfully"}
+    finally:
+        cursor.close()
+        conn.close()
+
+# Software CRUD endpoints
+@app.get("/api/software", response_model=List[dict])
+async def get_software():
+    """Get all software"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT * FROM software ORDER BY software_name")
+        software = cursor.fetchall()
+        return {"software": software}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/software", response_model=dict)
+async def create_software(software: dict):
+    """Create new software"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        query = """
+        INSERT INTO software (software_name, software_provider, license_update_date, license_expiry_date, is_active)
+        VALUES (%s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (
+            software['software_name'],
+            software['software_provider'],
+            software['license_update_date'],
+            software['license_expiry_date'],
+            software.get('is_active', True)
+        ))
+        conn.commit()
+        return {"message": "Software created successfully", "id": cursor.lastrowid}
+    except mysql.connector.Error as err:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(err))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/software/{software_id}", response_model=dict)
+async def update_software(software_id: int, software: dict):
+    """Update software"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        query = """
+        UPDATE software SET 
+        software_name = %s, software_provider = %s, license_update_date = %s, 
+        license_expiry_date = %s, is_active = %s, updated_at = CURRENT_TIMESTAMP
+        WHERE id = %s
+        """
+        cursor.execute(query, (
+            software['software_name'],
+            software['software_provider'],
+            software['license_update_date'],
+            software['license_expiry_date'],
+            software.get('is_active', True),
+            software_id
+        ))
+        conn.commit()
+        return {"message": "Software updated successfully"}
+    except mysql.connector.Error as err:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(err))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.delete("/api/software/{software_id}", response_model=dict)
+async def delete_software(software_id: int):
+    """Delete software"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM software WHERE id = %s", (software_id,))
+        conn.commit()
+        return {"message": "Software deleted successfully"}
+    except mysql.connector.Error as err:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(err))
     finally:
         cursor.close()
         conn.close()

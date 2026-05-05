@@ -26,10 +26,12 @@ import {
   ArrowUpDown,
   FileSpreadsheet,
   FileText,
-  Upload
+  Upload,
+  X
 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { NewAssetForm } from './NewAssetForm'
+import { NewAssetForm } from '@/components/assets/NewAssetForm'
+import { EditAssetForm } from '@/components/assets/EditAssetForm'
 import { AssetMassUpload } from './AssetMassUpload'
 import axios from 'axios'
 
@@ -88,6 +90,8 @@ export const AssetsManagementClean: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [assetToDelete, setAssetToDelete] = useState<number | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null)
 
   const API_BASE_URL = 'http://localhost:8001'
 
@@ -251,6 +255,36 @@ export const AssetsManagementClean: React.FC = () => {
   const cancelDeleteAsset = () => {
     setAssetToDelete(null)
     setDeleteConfirmOpen(false)
+  }
+
+  const handleEditAsset = (asset: Asset) => {
+    setAssetToEdit(asset)
+    setEditModalOpen(true)
+  }
+
+  const handleUpdateAsset = async (updatedAsset: Partial<Asset>) => {
+    if (!assetToEdit) return
+
+    try {
+      await axios.put(`${API_BASE_URL}/dev/assets/${assetToEdit.id}`, updatedAsset)
+      
+      // Refresh assets list
+      await fetchAssets()
+      
+      setMessage('Asset updated successfully')
+      setTimeout(() => setMessage(''), 3000)
+      setEditModalOpen(false)
+      setAssetToEdit(null)
+    } catch (error) {
+      console.error('Error updating asset:', error)
+      setMessage('Error updating asset')
+      setTimeout(() => setMessage(''), 3000)
+    }
+  }
+
+  const cancelEditAsset = () => {
+    setEditModalOpen(false)
+    setAssetToEdit(null)
   }
 
   const exportToCSV = () => {
@@ -543,6 +577,13 @@ export const AssetsManagementClean: React.FC = () => {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => handleEditAsset(asset)}
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => handleDeleteAsset(asset.id)}
                         >
                           <Trash2 className="h-3 w-3" />
@@ -598,6 +639,30 @@ export const AssetsManagementClean: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Asset Form */}
+      {editModalOpen && assetToEdit && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              Edit Asset
+              <Button variant="ghost" size="sm" onClick={cancelEditAsset}>
+                <X className="h-4 w-4" />
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              Update asset information
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <EditAssetForm
+              asset={assetToEdit}
+              onSubmit={handleUpdateAsset}
+              onCancel={cancelEditAsset}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

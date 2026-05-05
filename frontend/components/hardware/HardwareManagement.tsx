@@ -202,7 +202,9 @@ export const HardwareManagement: React.FC = () => {
       const matchesSearch = searchTerm === '' || 
         issue.device.toLowerCase().includes(searchTerm.toLowerCase()) ||
         issue.problem.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        issue.assetTag.toLowerCase().includes(searchTerm.toLowerCase())
+        issue.assetTag.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        issue.personAttending.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        issue.department.toLowerCase().includes(searchTerm.toLowerCase())
 
       const matchesStatus = filters.status === '' || filters.status === 'all' || issue.status === filters.status
       const matchesDeviceType = filters.deviceType === '' || filters.deviceType === 'all' || issue.deviceType === filters.deviceType
@@ -445,7 +447,7 @@ export const HardwareManagement: React.FC = () => {
           {/* Search */}
           <div className="mb-4">
             <Input
-              placeholder="Search by device, problem, or asset tag..."
+              placeholder="Search by device, problem, asset tag, assigned to, or department..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="max-w-md"

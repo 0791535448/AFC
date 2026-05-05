@@ -9,27 +9,27 @@ import {
   Home,
   Package,
   Monitor,
-  Wrench,
-  Users,
   Settings,
-  ChevronLeft,
-  ChevronRight,
-  AlertTriangle,
-  Activity,
-  Headphones,
+  Users,
   Building,
   Cpu,
   Tag,
   CheckCircle,
+  Headphones,
+  Wrench,
   LogOut,
   FileText,
-  ClipboardList
+  ClipboardList,
+  Database,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { BranchConfig } from '@/components/settings/BranchConfig'
 import { DeviceTypeConfig } from '@/components/settings/DeviceTypeConfig'
 import { MakeConfig } from '@/components/settings/MakeConfig'
 import { ModelConfig } from '@/components/settings/ModelConfig'
 import { StatusConfig } from '@/components/settings/StatusConfig'
+import { SoftwareConfig } from '@/components/settings/SoftwareConfig'
 import { AssetsManagementClean } from '@/components/assets/AssetsManagementClean'
 import { HardwareManagement } from '@/components/hardware/HardwareManagement'
 import { SupportManagement } from '@/components/support/SupportManagement'
@@ -224,7 +224,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: 'support',
-    label: 'Support',
+    label: 'Software Support',
     icon: <Headphones className="h-4 w-4" />
   },
   {
@@ -278,6 +278,11 @@ const menuItems: MenuItem[] = [
         id: 'statuses',
         label: 'Hardware Status',
         icon: <CheckCircle className="h-4 w-4" />
+      },
+      {
+        id: 'software',
+        label: 'Software',
+        icon: <Database className="h-4 w-4" />
       }
     ]
   }
@@ -323,6 +328,8 @@ export const AdminDashboard: React.FC = () => {
         return <ModelsContent />
       case 'statuses':
         return <StatusesContent />
+      case 'software':
+        return <SoftwareContent />
       default:
         return <DashboardContent />
     }
@@ -583,3 +590,5 @@ const MakesContent: React.FC = () => <MakeConfig />
 const ModelsContent: React.FC = () => <ModelConfig />
 
 const StatusesContent: React.FC = () => <StatusConfig />
+
+const SoftwareContent: React.FC = () => <SoftwareConfig />
