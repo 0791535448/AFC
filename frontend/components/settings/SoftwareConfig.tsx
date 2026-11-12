@@ -28,15 +28,36 @@ interface Software {
   is_active: boolean
 }
 
-const predefinedSoftware: Software[] = [
-  { id: 1, software_name: 'BR Net', software_provider: 'Craft Silicon', license_update_date: '2024-01-15', license_expiry_date: '2025-01-15', is_active: true },
-  { id: 2, software_name: 'FITNES', software_provider: 'FITNES Corp', license_update_date: '2024-02-20', license_expiry_date: '2025-02-20', is_active: true },
-  { id: 3, software_name: 'Perpay', software_provider: 'Perpay Solutions', license_update_date: '2024-03-10', license_expiry_date: '2025-03-10', is_active: true },
-  { id: 4, software_name: 'SOPHOS', software_provider: 'Sophos Ltd', license_update_date: '2024-04-05', license_expiry_date: '2025-04-05', is_active: true },
-  { id: 5, software_name: 'Zimbra', software_provider: 'Zimbra Inc', license_update_date: '2024-05-12', license_expiry_date: '2025-05-12', is_active: true },
-  { id: 6, software_name: 'GP', software_provider: 'Microsoft Dynamics', license_update_date: '2024-06-18', license_expiry_date: '2025-06-18', is_active: true },
-  { id: 7, software_name: 'Kaspersky', software_provider: 'Kaspersky Lab', license_update_date: '2024-07-22', license_expiry_date: '2025-07-22', is_active: true }
-]
+// Dynamic fallback storage that updates with user changes
+const getFallbackSoftware = (): Software[] => {
+  const stored = localStorage.getItem('software_fallback_data')
+  if (stored) {
+    try {
+      return JSON.parse(stored)
+    } catch {
+      // If corrupted, return initial data
+    }
+  }
+  
+  // Initial fallback data
+  const initialData: Software[] = [
+    { id: 1, software_name: 'BR Net', software_provider: 'Craft Silicon', license_update_date: '2024-01-15', license_expiry_date: '2025-01-15', is_active: true },
+    { id: 2, software_name: 'FITNES', software_provider: 'Craft Silicon', license_update_date: '2024-02-20', license_expiry_date: '2025-02-20', is_active: true },
+    { id: 3, software_name: 'Perpay', software_provider: 'Letcom', license_update_date: '2024-03-10', licence_expiry_date: '2025-03-10', is_active: true },
+    { id: 4, software_name: 'SOPHOS', software_provider: 'Sophos Ltd', license_update_date: '2024-04-05', license_expiry_date: '2025-04-05', is_active: true },
+    { id: 5, software_name: 'Zimbra', software_provider: 'Zimbra Inc', license_update_date: '2024-05-12', license_expiry_date: '2025-05-12', is_active: true },
+    { id: 6, software_name: 'GP', software_provider: 'Microsoft Dynamics', license_update_date: '2024-06-18', license_expiry_date: '2025-06-18', is_active: true },
+    { id: 7, software_name: 'Kaspersky', software_provider: 'Kaspersky Lab', license_update_date: '2024-07-22', license_expiry_date: '2025-07-22', is_active: true }
+  ]
+  
+  // Store initial data
+  localStorage.setItem('software_fallback_data', JSON.stringify(initialData))
+  return initialData
+}
+
+const updateFallbackSoftware = (updatedSoftware: Software[]) => {
+  localStorage.setItem('software_fallback_data', JSON.stringify(updatedSoftware))
+}
 
 export const SoftwareConfig: React.FC = () => {
   const [software, setSoftware] = useState<Software[]>([])
@@ -61,7 +82,7 @@ export const SoftwareConfig: React.FC = () => {
   const loadSoftware = async () => {
     try {
       // Load from API with cache busting and no-store directive
-      const response = await fetch('http://localhost:8001/api/software?t=' + Date.now(), {
+      const response = await fetch('http://localhost:8000/api/software?t=' + Date.now(), {
         cache: 'no-cache',
         headers: {
           'Cache-Control': 'no-cache',
@@ -82,9 +103,13 @@ export const SoftwareConfig: React.FC = () => {
       // Only fallback if network error, not if API returns error
       if (error.message && error.message.includes('Failed to load')) {
         setMessage(error.message)
+      } else if (error.name === 'TypeError' || error.message.includes('fetch')) {
+        // Only fallback on network/fetch errors
+        const fallbackData = getFallbackSoftware()
+        setSoftware(fallbackData)
+        setMessage('Using cached software data (API unavailable)')
       } else {
-        setSoftware(predefinedSoftware)
-        setMessage('Using predefined software data')
+        setMessage('Error loading software data')
       }
     } finally {
       setLoading(false)
@@ -124,8 +149,8 @@ export const SoftwareConfig: React.FC = () => {
     
     try {
       const url = editingId 
-        ? `http://localhost:8001/api/software/${editingId}`
-        : 'http://localhost:8001/api/software'
+        ? `http://localhost:8000/api/software/${editingId}`
+        : 'http://localhost:8000/api/software'
       
       const method = editingId ? 'PUT' : 'POST'
       
@@ -138,7 +163,24 @@ export const SoftwareConfig: React.FC = () => {
       })
 
       if (response.ok) {
-        await loadSoftware() // Reload software list
+        // Update fallback data with new/updated software
+        const currentFallback = getFallbackSoftware()
+        let updatedFallback: Software[]
+        
+        if (editingId) {
+          // Update existing software in fallback
+          updatedFallback = currentFallback.map(item => 
+            item.id === editingId ? { ...formData, id: editingId } : item
+          )
+        } else {
+          // Add new software to fallback
+          const newSoftware = { ...formData, id: Date.now() } // Temporary ID
+          updatedFallback = [...currentFallback, newSoftware]
+        }
+        
+        updateFallbackSoftware(updatedFallback)
+        
+        await loadSoftware() // Reload software list from API
         setMessage(editingId ? 'Software updated successfully' : 'Software added successfully')
         resetForm()
       } else {
@@ -166,11 +208,16 @@ export const SoftwareConfig: React.FC = () => {
 
   const handleDelete = async (id: number) => {
     try {
-      const response = await fetch(`http://localhost:8001/api/software/${id}`, {
+      const response = await fetch(`http://localhost:8000/api/software/${id}`, {
         method: 'DELETE',
       })
 
       if (response.ok) {
+        // Update fallback data by removing deleted software
+        const currentFallback = getFallbackSoftware()
+        const updatedFallback = currentFallback.filter(item => item.id !== id)
+        updateFallbackSoftware(updatedFallback)
+        
         await loadSoftware() // Reload software list
         setMessage('Software deleted successfully')
       } else {

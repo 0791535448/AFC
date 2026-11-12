@@ -6,12 +6,12 @@ async function testConnection() {
     console.log('Testing connection to backend...');
     
     // Test basic connection
-    const response = await axios.get('http://localhost:8001/');
+    const response = await axios.get('http://localhost:8000/');
     console.log('✓ Backend connection successful');
     console.log('Response:', response.data);
     
     // Test login with correct credentials
-    const loginResponse = await axios.post('http://localhost:8001/login', {
+    const loginResponse = await axios.post('http://localhost:8000/login', {
       username: 'superadmin',
       password: 'password123'
     });
@@ -20,7 +20,7 @@ async function testConnection() {
     
     // Test login with incorrect credentials
     try {
-      await axios.post('http://localhost:8001/login', {
+      await axios.post('http://localhost:8000/login', {
         username: 'wronguser',
         password: 'wrongpass'
       });

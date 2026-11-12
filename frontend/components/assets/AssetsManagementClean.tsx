@@ -92,8 +92,32 @@ export const AssetsManagementClean: React.FC = () => {
   const [assetToDelete, setAssetToDelete] = useState<number | null>(null)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
-  const API_BASE_URL = 'http://localhost:8001'
+  const API_BASE_URL = 'http://localhost:8000'
+
+  const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setIsImporting(true)
+    setMessage('')
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await axios.post(`${API_BASE_URL}/api/assets/import`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      const d = response.data
+      setMessage(`Import complete: ${d.imported} added, ${d.updated} updated, ${d.skipped} skipped.`)
+      await fetchAssets()
+    } catch (error: any) {
+      setMessage(error.response?.data?.detail || 'Import failed. Please check the file format.')
+    } finally {
+      setIsImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   // Fetch assets from API
   const fetchAssets = async () => {
@@ -417,6 +441,17 @@ export const AssetsManagementClean: React.FC = () => {
               </Button>
             </div>
             <div className="flex items-center space-x-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".xlsx,.xls"
+                onChange={handleExcelImport}
+                className="hidden"
+              />
+              <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                {isImporting ? 'Importing...' : 'Import Excel'}
+              </Button>
               <Button variant="outline" onClick={exportToCSV}>
                 <FileSpreadsheet className="h-4 w-4 mr-2" />
                 Export CSV

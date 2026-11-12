@@ -363,7 +363,7 @@ CREATE TABLE IF NOT EXISTS software (
 
 -- Insert predefined software data
 INSERT INTO software (software_name, software_provider, license_update_date, license_expiry_date, is_active) VALUES
-('BR Net', 'BR Systems', '2024-01-15', '2025-01-15', TRUE),
+('BR Net', 'Craft Silicon', '2024-01-15', '2025-01-15', TRUE),
 ('FITNES', 'FITNES Corp', '2024-02-20', '2025-02-20', TRUE),
 ('Perpay', 'Perpay Solutions', '2024-03-10', '2025-03-10', TRUE),
 ('SOPHOS', 'Sophos Ltd', '2024-04-05', '2025-04-05', TRUE),

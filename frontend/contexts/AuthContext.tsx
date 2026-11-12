@@ -20,6 +20,8 @@ interface AuthContextType {
   logout: () => void
   isLoading: boolean
   isAuthenticated: boolean
+  isSuperAdmin: boolean
+  hasRole: (role: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -53,7 +55,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const fetchUser = async (authToken: string) => {
     try {
-      const response = await axios.get('http://localhost:8001/users/me', {
+      const response = await axios.get('http://localhost:8000/users/me', {
         headers: {
           Authorization: `Bearer ${authToken}`
         }
@@ -71,7 +73,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (username: string, password: string) => {
     try {
       console.log('Attempting login with:', username)
-      const response = await axios.post('http://localhost:8001/login', {
+      const response = await axios.post('http://localhost:8000/login', {
         username,
         password
       })
@@ -107,13 +109,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('token')
   }
 
+  const isSuperAdmin = user?.role === 'Super Admin'
+
+  const hasRole = (role: string): boolean => {
+    if (!user) return false
+    if (user.role === 'Super Admin') return true
+    return user.role === role
+  }
+
   const value: AuthContextType = {
     user,
     token,
     login,
     logout,
     isLoading,
-    isAuthenticated: !!user && !!token
+    isAuthenticated: !!user && !!token,
+    isSuperAdmin,
+    hasRole
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

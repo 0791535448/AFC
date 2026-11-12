@@ -110,7 +110,6 @@ export const LoginForm: React.FC = () => {
               <p><strong>Super Admin:</strong> superadmin / password123</p>
               <p><strong>Admin:</strong> admin / password123</p>
               <p><strong>Technician:</strong> jdoe / password123</p>
-              <p><strong>Manager:</strong> jsmith / password123</p>
             </div>
           </div>
         </CardContent>

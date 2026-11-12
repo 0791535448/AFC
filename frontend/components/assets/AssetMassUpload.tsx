@@ -66,7 +66,7 @@ export const AssetMassUpload: React.FC<AssetMassUploadProps> = ({ onAssetsUpload
   const [showPreview, setShowPreview] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const API_BASE_URL = 'http://localhost:8001'
+  const API_BASE_URL = 'http://localhost:8000'
 
   // Download CSV template
   const downloadTemplate = () => {

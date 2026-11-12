@@ -111,6 +111,38 @@ export const SupportManagement: React.FC = () => {
     }
   ])
 
+  // Dynamic data for dropdowns
+  const [softwareList, setSoftwareList] = useState<any[]>([])
+  const [branchList, setBranchList] = useState<any[]>([])
+  const [loadingDropdowns, setLoadingDropdowns] = useState(true)
+
+  // Load software and branch data for dropdowns
+  useEffect(() => {
+    loadDropdownData()
+  }, [])
+
+  const loadDropdownData = async () => {
+    try {
+      // Load software data
+      const softwareResponse = await fetch('http://localhost:8000/api/software?t=' + Date.now())
+      if (softwareResponse.ok) {
+        const softwareData = await softwareResponse.json()
+        setSoftwareList(softwareData.software || [])
+      }
+
+      // Load branch data
+      const branchResponse = await fetch('http://localhost:8000/api/branches?t=' + Date.now())
+      if (branchResponse.ok) {
+        const branchData = await branchResponse.json()
+        setBranchList(branchData.branches || [])
+      }
+    } catch (error) {
+      console.error('Error loading dropdown data:', error)
+    } finally {
+      setLoadingDropdowns(false)
+    }
+  }
+
   const [searchTerm, setSearchTerm] = useState('')
   const [filters, setFilters] = useState({
     status: '',
@@ -351,7 +383,12 @@ export const SupportManagement: React.FC = () => {
                     </div>
                   </DialogHeader>
                   <div className="pt-6">
-                    <SupportTicketForm onSubmit={handleAddTicket} onCancel={() => setIsAddModalOpen(false)} />
+                    <SupportTicketForm 
+  onSubmit={handleAddTicket} 
+  onCancel={() => setIsAddModalOpen(false)}
+  softwareList={softwareList}
+  branchList={branchList}
+/>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -586,6 +623,8 @@ export const SupportManagement: React.FC = () => {
                   setIsEditModalOpen(false)
                   setEditingTicket(null)
                 }}
+                softwareList={softwareList}
+                branchList={branchList}
               />
             </div>
           )}
@@ -613,9 +652,11 @@ interface SupportTicketFormProps {
   ticket?: SupportTicket
   onSubmit: (ticket: SupportTicket) => void
   onCancel: () => void
+  softwareList?: any[]
+  branchList?: any[]
 }
 
-const SupportTicketForm: React.FC<SupportTicketFormProps> = ({ ticket, onSubmit, onCancel }) => {
+const SupportTicketForm: React.FC<SupportTicketFormProps> = ({ ticket, onSubmit, onCancel, softwareList = [], branchList = [] }) => {
   const [formData, setFormData] = useState<Omit<SupportTicket, 'id' | 'ticketNumber'>>({
     subject: ticket?.subject || '',
     description: ticket?.description || '',
@@ -652,13 +693,23 @@ const SupportTicketForm: React.FC<SupportTicketFormProps> = ({ ticket, onSubmit,
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="subject">Subject *</Label>
-          <Input
-            id="subject"
-            value={formData.subject}
-            onChange={(e) => handleInputChange('subject', e.target.value)}
-            placeholder="Enter ticket subject"
-            required
-          />
+          <Select value={formData.subject} onValueChange={(value) => handleInputChange('subject', value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select software or enter custom subject" />
+            </SelectTrigger>
+            <SelectContent>
+              {softwareList.length > 0 ? (
+                softwareList.map((software: any) => (
+                  <SelectItem key={software.id} value={software.software_name}>
+                    {software.software_name}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="loading" disabled>Loading software...</SelectItem>
+              )}
+              <SelectItem value="other">Other (Custom Subject)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <Label htmlFor="requester">Requester Name *</Label>
@@ -688,12 +739,16 @@ const SupportTicketForm: React.FC<SupportTicketFormProps> = ({ ticket, onSubmit,
               <SelectValue placeholder="Select department" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="IT">IT</SelectItem>
-              <SelectItem value="Sales">Sales</SelectItem>
-              <SelectItem value="Marketing">Marketing</SelectItem>
-              <SelectItem value="Finance">Finance</SelectItem>
-              <SelectItem value="HR">HR</SelectItem>
-              <SelectItem value="Management">Management</SelectItem>
+              {branchList.length > 0 ? (
+                branchList.map((branch: any) => (
+                  <SelectItem key={branch.id} value={branch.branch_name}>
+                    {branch.branch_name}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="loading" disabled>Loading departments...</SelectItem>
+              )}
+              <SelectItem value="other">Other (Custom Department)</SelectItem>
             </SelectContent>
           </Select>
         </div>

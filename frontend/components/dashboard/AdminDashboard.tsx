@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -33,171 +33,10 @@ import { SoftwareConfig } from '@/components/settings/SoftwareConfig'
 import { AssetsManagementClean } from '@/components/assets/AssetsManagementClean'
 import { HardwareManagement } from '@/components/hardware/HardwareManagement'
 import { SupportManagement } from '@/components/support/SupportManagement'
-
-// Placeholder components for reports
-const IssueNotesContent = () => (
-  <div className="p-6">
-    <h2 className="text-2xl font-bold mb-4">Issue Notes</h2>
-    <div className="bg-white rounded-lg shadow p-6">
-      <p className="text-gray-600">Issue Notes functionality coming soon...</p>
-    </div>
-  </div>
-)
-
-const RepairFormContent = () => {
-  const [formData, setFormData] = useState({
-    date: '',
-    assetTag: '',
-    problem: '',
-    technician: '',
-    partsUsed: '',
-    cost: '',
-    status: 'pending',
-    notes: ''
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    console.log('Repair form submitted:', formData)
-    // Handle form submission logic here
-  }
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-  }
-
-  return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-6">Repair Form</h2>
-      <div className="bg-white rounded-lg shadow p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left Column */}
-            <div className="space-y-4">
-              {/* Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">DATE</label>
-                <input
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => handleInputChange('date', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              {/* Asset Tag */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">ASSET TAG</label>
-                <input
-                  type="text"
-                  value={formData.assetTag}
-                  onChange={(e) => handleInputChange('assetTag', e.target.value)}
-                  placeholder="Enter asset tag"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              {/* Problem */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">PROBLEM</label>
-                <textarea
-                  value={formData.problem}
-                  onChange={(e) => handleInputChange('problem', e.target.value)}
-                  placeholder="Describe the problem"
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              {/* Technician */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">TECHNICIAN</label>
-                <input
-                  type="text"
-                  value={formData.technician}
-                  onChange={(e) => handleInputChange('technician', e.target.value)}
-                  placeholder="Enter technician name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Right Column */}
-            <div className="space-y-4">
-              {/* Parts Used */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">PARTS USED</label>
-                <textarea
-                  value={formData.partsUsed}
-                  onChange={(e) => handleInputChange('partsUsed', e.target.value)}
-                  placeholder="List parts used"
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Cost */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">COST</label>
-                <input
-                  type="number"
-                  value={formData.cost}
-                  onChange={(e) => handleInputChange('cost', e.target.value)}
-                  placeholder="Enter repair cost"
-                  step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              {/* Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">STATUS</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => handleInputChange('status', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="pending">Pending</option>
-                  <option value="in-progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">NOTES</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => handleInputChange('notes', e.target.value)}
-              placeholder="Additional notes"
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Submit Button */}
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              Submit Repair Form
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
+import { AllUsers } from '@/components/users/AllUsers'
+import { ICTOfficer } from '@/components/users/ICTOfficer'
+import { Departments } from '@/components/users/Departments'
+import { IssueNotesContent, RepairFormContent } from '@/components/reports/ReportsContent'
 
 interface MenuItem {
   id: string
@@ -247,7 +86,24 @@ const menuItems: MenuItem[] = [
   {
     id: 'users',
     label: 'User Management',
-    icon: <Users className="h-4 w-4" />
+    icon: <Users className="h-4 w-4" />,
+    children: [
+      {
+        id: 'all-users',
+        label: 'All Users',
+        icon: <Users className="h-4 w-4" />
+      },
+      {
+        id: 'ict-officer',
+        label: 'ICT Officer',
+        icon: <Cpu className="h-4 w-4" />
+      },
+      {
+        id: 'departments',
+        label: 'Departments',
+        icon: <Building className="h-4 w-4" />
+      }
+    ]
   },
   {
     id: 'settings',
@@ -289,10 +145,29 @@ const menuItems: MenuItem[] = [
 ]
 
 export const AdminDashboard: React.FC = () => {
-  const { user, logout } = useAuth()
+  const { user, logout, isSuperAdmin } = useAuth()
   const [activeMenu, setActiveMenu] = useState('dashboard')
-  const [expandedMenus, setExpandedMenus] = useState<string[]>(['settings'])
+  const [expandedMenus, setExpandedMenus] = useState<string[]>(['settings', 'users'])
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
+  // Redirect non-superadmin users
+  if (!isSuperAdmin) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle className="text-red-600">Access Denied</CardTitle>
+            <CardDescription>You must be logged in as Super Admin to access this dashboard.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={logout} className="w-full">
+              Logout
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const toggleMenu = (menuId: string) => {
     if (expandedMenus.includes(menuId)) {
@@ -316,8 +191,12 @@ export const AdminDashboard: React.FC = () => {
         return <IssueNotesContent />
       case 'repair-form':
         return <RepairFormContent />
-      case 'users':
-        return <UsersContent />
+      case 'all-users':
+        return <AllUsersContent />
+      case 'ict-officer':
+        return <ICTOfficerContent />
+      case 'departments':
+        return <DepartmentsContent />
       case 'branches':
         return <BranchesContent />
       case 'device-types':
@@ -339,7 +218,6 @@ export const AdminDashboard: React.FC = () => {
     switch (role) {
       case 'Super Admin': return 'bg-purple-100 text-purple-800'
       case 'Admin': return 'bg-blue-100 text-blue-800'
-      case 'Manager': return 'bg-green-100 text-green-800'
       case 'Technician': return 'bg-orange-100 text-orange-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -569,17 +447,11 @@ const SupportContent: React.FC = () => (
 
 const AssetsContent: React.FC = () => <AssetsManagementClean />
 
-const UsersContent: React.FC = () => (
-  <Card>
-    <CardHeader>
-      <CardTitle>User Management</CardTitle>
-      <CardDescription>Manage system users and permissions</CardDescription>
-    </CardHeader>
-    <CardContent>
-      <p>User management content will be implemented here.</p>
-    </CardContent>
-  </Card>
-)
+const AllUsersContent: React.FC = () => <AllUsers />
+
+const ICTOfficerContent: React.FC = () => <ICTOfficer />
+
+const DepartmentsContent: React.FC = () => <Departments />
 
 const BranchesContent: React.FC = () => <BranchConfig />
 
