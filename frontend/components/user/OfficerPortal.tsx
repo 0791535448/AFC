@@ -10,6 +10,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
+import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog'
 import {
   Monitor,
   Home,
@@ -22,12 +24,12 @@ import {
   Package,
   Edit2,
   ClipboardList,
-  MonitorSmartphone,
   FileText,
   Wrench,
   ChevronRight
 } from 'lucide-react'
 import { IssueNotesContent, RepairFormContent } from '@/components/reports/ReportsContent'
+import { TicketComments } from '@/components/tickets/TicketComments'
 
 const API_BASE_URL = 'http://localhost:8000'
 
@@ -80,6 +82,7 @@ export const OfficerPortal: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
   const [activeSection, setActiveSection] = useState('overview')
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
 
@@ -115,10 +118,6 @@ export const OfficerPortal: React.FC = () => {
     status: 'Submitted', priority: 'Medium', resolution_notes: '', assigned_to: ''
   })
 
-  // Issue equipment modal
-  const [isIssueOpen, setIsIssueOpen] = useState(false)
-  const [issueForm, setIssueForm] = useState({ asset_id: '', assigned_to: '' })
-
   const [submitting, setSubmitting] = useState(false)
 
   const showMessage = (msg: string) => {
@@ -150,9 +149,11 @@ export const OfficerPortal: React.FC = () => {
   }, [loadData])
 
   const filteredReports = useMemo(() => {
-    if (statusFilter === 'all') return reports
-    return reports.filter(r => r.status === statusFilter)
-  }, [reports, statusFilter])
+    return reports.filter(r =>
+      (statusFilter === 'all' || r.status === statusFilter) &&
+      (categoryFilter === 'all' || r.category === categoryFilter)
+    )
+  }, [reports, statusFilter, categoryFilter])
 
   const stats = useMemo(() => ({
     total: reports.length,
@@ -225,38 +226,22 @@ export const OfficerPortal: React.FC = () => {
     }
   }
 
-  const handleIssueEquipment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!issueForm.asset_id || !issueForm.assigned_to) {
-      showMessage('Please select both an asset and a user')
-      return
-    }
-    setSubmitting(true)
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/assets/${issueForm.asset_id}/assign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assigned_to: issueForm.assigned_to })
-      })
-      if (!response.ok) throw new Error('Failed to assign asset')
-      showMessage('Equipment issued successfully')
-      setIsIssueOpen(false)
-      setIssueForm({ asset_id: '', assigned_to: '' })
-      await loadData()
-    } catch (error) {
-      console.error('Error issuing equipment:', error)
-      showMessage('Error issuing equipment')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Submitted': return 'bg-blue-100 text-blue-800'
       case 'In Progress': return 'bg-yellow-100 text-yellow-800'
       case 'Resolved': return 'bg-green-100 text-green-800'
       case 'Closed': return 'bg-gray-100 text-gray-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'hardware': return 'bg-orange-100 text-orange-800'
+      case 'software': return 'bg-blue-100 text-blue-800'
+      case 'network': return 'bg-purple-100 text-purple-800'
+      case 'account': return 'bg-teal-100 text-teal-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -371,53 +356,8 @@ export const OfficerPortal: React.FC = () => {
               <p className="text-sm text-gray-600">{sectionTitles[activeSection]?.subtitle}</p>
             </div>
             <div className="flex items-center space-x-2">
-              <Dialog open={isIssueOpen} onOpenChange={setIsIssueOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <MonitorSmartphone className="h-4 w-4 mr-2" />
-                    Issue Equipment
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-h-[90vh] overflow-y-auto bg-white">
-                  <DialogHeader>
-                    <DialogTitle>Issue ICT Equipment</DialogTitle>
-                    <DialogDescription>Assign an asset to a user. They will be asked to acknowledge receipt.</DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleIssueEquipment} className="space-y-4 pt-4">
-                    <div className="space-y-2">
-                      <Label>Asset *</Label>
-                      <Select value={issueForm.asset_id} onValueChange={(v) => setIssueForm(prev => ({ ...prev, asset_id: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Select asset" /></SelectTrigger>
-                        <SelectContent>
-                          {assets.map(a => (
-                            <SelectItem key={a.id} value={String(a.id)}>
-                              {a.asset_code} — {a.asset_name} ({a.brand || 'N/A'})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>User *</Label>
-                      <Select value={issueForm.assigned_to} onValueChange={(v) => setIssueForm(prev => ({ ...prev, assigned_to: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Select user" /></SelectTrigger>
-                        <SelectContent>
-                          {users.map(u => (
-                            <SelectItem key={u.id} value={u.username}>
-                              {u.full_name} (@{u.username})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex justify-end space-x-2">
-                      <Button type="button" variant="outline" onClick={() => setIsIssueOpen(false)}>Cancel</Button>
-                      <Button type="submit" disabled={submitting}>Issue Equipment</Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-
+              {user?.username && <NotificationBell username={user.username} />}
+              {user?.username && user?.role === 'Super Admin' && <ChangePasswordDialog username={user.username} />}
               <Dialog open={isRegisterOpen} onOpenChange={setIsRegisterOpen}>
                 <DialogTrigger asChild>
                   <Button>
@@ -585,15 +525,26 @@ export const OfficerPortal: React.FC = () => {
                     <CardDescription>All registered ICT issues — update status and repair progress</CardDescription>
                   </div>
                   {activeSection === 'tickets' && (
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="w-40">
-                        <SelectValue placeholder="Filter status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        {ticketStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center space-x-2">
+                      <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                        <SelectTrigger className="w-36">
+                          <SelectValue placeholder="Filter type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          {faultCategories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-40">
+                          <SelectValue placeholder="Filter status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Statuses</SelectItem>
+                          {ticketStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   )}
                 </div>
               </CardHeader>
@@ -611,6 +562,7 @@ export const OfficerPortal: React.FC = () => {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reported By</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned To</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
@@ -627,13 +579,23 @@ export const OfficerPortal: React.FC = () => {
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-900">{ticket.reported_by}</td>
                             <td className="px-4 py-3 text-sm text-gray-900">{ticket.assigned_to || <span className="text-gray-400">Unassigned</span>}</td>
+                            <td className="px-4 py-3"><Badge className={getCategoryColor(ticket.category)}>{ticket.category}</Badge></td>
                             <td className="px-4 py-3"><Badge className={getPriorityColor(ticket.priority)}>{ticket.priority}</Badge></td>
                             <td className="px-4 py-3"><Badge className={getStatusColor(ticket.status)}>{ticket.status}</Badge></td>
                             <td className="px-4 py-3 text-sm text-gray-500">{new Date(ticket.created_at).toLocaleDateString()}</td>
                             <td className="px-4 py-3">
-                              <Button variant="ghost" size="sm" onClick={() => openTicketEdit(ticket)}>
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center space-x-1">
+                                <TicketComments
+                                  reportId={ticket.id}
+                                  ticketLabel={`${ticket.ticket_number} — ${ticket.subject}`}
+                                  currentUsername={user?.username || ''}
+                                  currentName={user?.full_name || ''}
+                                  readOnly={ticket.status === 'Resolved' || ticket.status === 'Closed'}
+                                />
+                                <Button variant="ghost" size="sm" onClick={() => openTicketEdit(ticket)}>
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}

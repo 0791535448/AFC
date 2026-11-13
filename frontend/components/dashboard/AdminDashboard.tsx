@@ -22,7 +22,10 @@ import {
   ClipboardList,
   Database,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Award,
+  Shield,
+  GraduationCap
 } from 'lucide-react'
 import { BranchConfig } from '@/components/settings/BranchConfig'
 import { DeviceTypeConfig } from '@/components/settings/DeviceTypeConfig'
@@ -35,7 +38,6 @@ import { HardwareManagement } from '@/components/hardware/HardwareManagement'
 import { SupportManagement } from '@/components/support/SupportManagement'
 import { AllUsers } from '@/components/users/AllUsers'
 import { ICTOfficer } from '@/components/users/ICTOfficer'
-import { Departments } from '@/components/users/Departments'
 import { IssueNotesContent, RepairFormContent } from '@/components/reports/ReportsContent'
 
 interface MenuItem {
@@ -57,14 +59,21 @@ const menuItems: MenuItem[] = [
     icon: <Package className="h-4 w-4" />
   },
   {
-    id: 'hardware',
-    label: 'Hardware Management',
-    icon: <Monitor className="h-4 w-4" />
-  },
-  {
     id: 'support',
-    label: 'Software Support',
-    icon: <Headphones className="h-4 w-4" />
+    label: 'Support',
+    icon: <Headphones className="h-4 w-4" />,
+    children: [
+      {
+        id: 'hardware-support',
+        label: 'Hardware Support',
+        icon: <Monitor className="h-4 w-4" />
+      },
+      {
+        id: 'software-support',
+        label: 'Software Support',
+        icon: <Headphones className="h-4 w-4" />
+      }
+    ]
   },
   {
     id: 'reports',
@@ -94,14 +103,24 @@ const menuItems: MenuItem[] = [
         icon: <Users className="h-4 w-4" />
       },
       {
-        id: 'ict-officer',
-        label: 'ICT Officer',
+        id: 'ict-officers',
+        label: 'ICT Officers',
         icon: <Cpu className="h-4 w-4" />
       },
       {
-        id: 'departments',
-        label: 'Departments',
-        icon: <Building className="h-4 w-4" />
+        id: 'senior-ict-officers',
+        label: 'Senior ICT Officers',
+        icon: <Award className="h-4 w-4" />
+      },
+      {
+        id: 'ict-interns',
+        label: 'ICT Interns',
+        icon: <GraduationCap className="h-4 w-4" />
+      },
+      {
+        id: 'superadmins',
+        label: 'Superadministrators',
+        icon: <Shield className="h-4 w-4" />
       }
     ]
   },
@@ -180,12 +199,12 @@ export const AdminDashboard: React.FC = () => {
   const renderContent = () => {
     switch (activeMenu) {
       case 'dashboard':
-        return <DashboardContent />
+        return <DashboardContent onNavigate={setActiveMenu} />
       case 'assets':
         return <AssetsContent />
-      case 'hardware':
+      case 'hardware-support':
         return <HardwareContent />
-      case 'support':
+      case 'software-support':
         return <SupportContent />
       case 'issue-notes':
         return <IssueNotesContent />
@@ -193,10 +212,14 @@ export const AdminDashboard: React.FC = () => {
         return <RepairFormContent />
       case 'all-users':
         return <AllUsersContent />
-      case 'ict-officer':
+      case 'ict-officers':
         return <ICTOfficerContent />
-      case 'departments':
-        return <DepartmentsContent />
+      case 'senior-ict-officers':
+        return <SeniorICTOfficerContent />
+      case 'ict-interns':
+        return <ICTInternContent />
+      case 'superadmins':
+        return <SuperAdminContent />
       case 'branches':
         return <BranchesContent />
       case 'device-types':
@@ -210,7 +233,7 @@ export const AdminDashboard: React.FC = () => {
       case 'software':
         return <SoftwareContent />
       default:
-        return <DashboardContent />
+        return <DashboardContent onNavigate={setActiveMenu} />
     }
   }
 
@@ -226,23 +249,23 @@ export const AdminDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-white shadow-lg transition-all duration-300 flex flex-col`}>
+      <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-blue-900 shadow-lg transition-all duration-300 flex flex-col`}>
         {/* Header */}
-        <div className="p-4 border-b">
+        <div className="p-4 border-b border-blue-800">
           <div className="flex items-center justify-between">
             {!isSidebarCollapsed && (
               <div className="flex items-center space-x-2">
-                <div className="p-2 bg-blue-600 rounded-lg">
-                  <Monitor className="h-5 w-5 text-white" />
+                <div className="p-2 bg-white rounded-lg">
+                  <Monitor className="h-5 w-5 text-blue-900" />
                 </div>
-                <span className="font-semibold text-gray-900">Admin Panel</span>
+                <span className="font-semibold text-white">Admin Panel</span>
               </div>
             )}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="p-1"
+              className="p-1 text-blue-100 hover:bg-blue-800 hover:text-white"
             >
               {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
             </Button>
@@ -254,8 +277,10 @@ export const AdminDashboard: React.FC = () => {
           {menuItems.map((item) => (
             <div key={item.id}>
               <Button
-                variant={activeMenu === item.id ? "default" : "ghost"}
-                className={`w-full justify-start ${isSidebarCollapsed ? 'px-2' : ''}`}
+                variant={activeMenu === item.id || item.children?.some(c => c.id === activeMenu) ? "default" : "ghost"}
+                className={`w-full justify-start ${isSidebarCollapsed ? 'px-2' : ''} ${activeMenu === item.id || item.children?.some(c => c.id === activeMenu)
+                  ? 'bg-white text-blue-900 hover:bg-blue-50'
+                  : 'text-blue-100 hover:bg-blue-800 hover:text-white'}`}
                 onClick={() => {
                   if (item.children) {
                     toggleMenu(item.id)
@@ -284,7 +309,9 @@ export const AdminDashboard: React.FC = () => {
                       key={child.id}
                       variant={activeMenu === child.id ? "default" : "ghost"}
                       size="sm"
-                      className="w-full justify-start"
+                      className={`w-full justify-start ${activeMenu === child.id
+                        ? 'bg-white text-blue-900 hover:bg-blue-50'
+                        : 'text-blue-100 hover:bg-blue-800 hover:text-white'}`}
                       onClick={() => setActiveMenu(child.id)}
                     >
                       {child.icon}
@@ -298,17 +325,17 @@ export const AdminDashboard: React.FC = () => {
         </nav>
 
         {/* User Info */}
-        <div className="p-4 border-t">
+        <div className="p-4 border-t border-blue-800">
           {!isSidebarCollapsed ? (
             <div className="space-y-3">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">
+                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+                  <span className="text-blue-900 text-sm font-medium">
                     {user?.full_name?.charAt(0) || 'A'}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                  <p className="text-sm font-medium text-white truncate">
                     {user?.full_name}
                   </p>
                   <Badge className={getRoleColor(user?.role || '')}>
@@ -317,10 +344,10 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={logout}
-                className="w-full"
+                className="w-full text-blue-100 hover:bg-blue-800 hover:text-white"
               >
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
@@ -328,10 +355,10 @@ export const AdminDashboard: React.FC = () => {
             </div>
           ) : (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={logout}
-              className="w-full"
+              className="w-full text-blue-100 hover:bg-blue-800 hover:text-white"
             >
               <LogOut className="h-4 w-4" />
             </Button>
@@ -374,7 +401,7 @@ export const AdminDashboard: React.FC = () => {
 }
 
 // Dashboard Content Component
-const DashboardContent: React.FC = () => {
+const DashboardContent: React.FC<{ onNavigate?: (menuId: string) => void }> = ({ onNavigate }) => {
   const stats = [
     { title: 'Total Hardware', value: '156', icon: Monitor, change: '+12%' },
     { title: 'Active Repairs', value: '8', icon: Wrench, change: '-3' },
@@ -417,15 +444,15 @@ const DashboardContent: React.FC = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button className="h-12">
+            <Button className="h-12" onClick={() => onNavigate?.('assets')}>
               <Monitor className="h-4 w-4 mr-2" />
-              Add Hardware
+              Add Asset
             </Button>
-            <Button variant="outline" className="h-12">
+            <Button variant="outline" className="h-12" onClick={() => onNavigate?.('all-users')}>
               <Users className="h-4 w-4 mr-2" />
               Manage Users
             </Button>
-            <Button variant="outline" className="h-12">
+            <Button variant="outline" className="h-12" onClick={() => onNavigate?.('branches')}>
               <Settings className="h-4 w-4 mr-2" />
               System Settings
             </Button>
@@ -449,9 +476,13 @@ const AssetsContent: React.FC = () => <AssetsManagementClean />
 
 const AllUsersContent: React.FC = () => <AllUsers />
 
-const ICTOfficerContent: React.FC = () => <ICTOfficer />
+const ICTOfficerContent: React.FC = () => <ICTOfficer role="ICT Officer" title="ICT Officers" />
 
-const DepartmentsContent: React.FC = () => <Departments />
+const SeniorICTOfficerContent: React.FC = () => <ICTOfficer role="Senior ICT Officer" title="Senior ICT Officers" />
+
+const ICTInternContent: React.FC = () => <ICTOfficer role="ICT Intern" title="ICT Interns" />
+
+const SuperAdminContent: React.FC = () => <AllUsers fixedRole="Super Admin" title="Superadministrators" />
 
 const BranchesContent: React.FC = () => <BranchConfig />
 

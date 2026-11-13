@@ -10,6 +10,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { useAuth } from '@/contexts/AuthContext'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
+import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog'
+import { TicketComments } from '@/components/tickets/TicketComments'
 import {
   Monitor,
   Home,
@@ -65,6 +68,10 @@ export const UserPortal: React.FC = () => {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [acknowledging, setAcknowledging] = useState<number | null>(null)
+  const [ackAsset, setAckAsset] = useState<AssignedAsset | null>(null)
+  const [signature, setSignature] = useState('')
+  const [receivedDate, setReceivedDate] = useState(new Date().toISOString().slice(0, 10))
+  const [ackDialogOpen, setAckDialogOpen] = useState(false)
   const [activeSection, setActiveSection] = useState('overview')
 
   const navItems = [
@@ -158,12 +165,34 @@ export const UserPortal: React.FC = () => {
     }
   }
 
-  const handleAcknowledge = async (assetId: number) => {
-    setAcknowledging(assetId)
+  const openAcknowledgeDialog = (asset: AssignedAsset) => {
+    setAckAsset(asset)
+    setSignature(user?.full_name || '')
+    setReceivedDate(new Date().toISOString().slice(0, 10))
+    setAckDialogOpen(true)
+  }
+
+  const handleAcknowledge = async () => {
+    if (!ackAsset) return
+    if (!signature.trim()) {
+      showMessage('Please type your full name as your signature')
+      return
+    }
+    if (!receivedDate) {
+      showMessage('Please enter the date you received the equipment')
+      return
+    }
+    setAcknowledging(ackAsset.id)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/assets/${assetId}/acknowledge`, { method: 'POST' })
+      const response = await fetch(`${API_BASE_URL}/api/assets/${ackAsset.id}/acknowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signature: signature.trim(), received_date: receivedDate })
+      })
       if (!response.ok) throw new Error('Failed to acknowledge')
-      showMessage('Equipment receipt acknowledged')
+      showMessage('Equipment receipt acknowledged — signature recorded on the issue note')
+      setAckDialogOpen(false)
+      setAckAsset(null)
       await loadData()
     } catch (error) {
       console.error('Error acknowledging asset:', error)
@@ -263,6 +292,8 @@ export const UserPortal: React.FC = () => {
               <p className="text-sm text-gray-600">{sectionTitles[activeSection]?.subtitle}</p>
             </div>
             <div className="flex items-center space-x-2">
+              {user?.username && <NotificationBell username={user.username} />}
+              {user?.username && user?.role === 'Super Admin' && <ChangePasswordDialog username={user.username} />}
               <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
                 <DialogTrigger asChild>
                   <Button>
@@ -458,6 +489,15 @@ export const UserPortal: React.FC = () => {
                             Resolution: {report.resolution_notes}
                           </p>
                         )}
+                        <div className="mt-3">
+                          <TicketComments
+                            reportId={report.id}
+                            ticketLabel={`${report.ticket_number} — ${report.subject}`}
+                            currentUsername={user?.username || ''}
+                            currentName={user?.full_name || ''}
+                            readOnly={report.status === 'Resolved' || report.status === 'Closed'}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -506,7 +546,7 @@ export const UserPortal: React.FC = () => {
                         ) : (
                           <Button
                             size="sm"
-                            onClick={() => handleAcknowledge(asset.id)}
+                            onClick={() => openAcknowledgeDialog(asset)}
                             disabled={acknowledging === asset.id}
                           >
                             <CheckCircle className="h-4 w-4 mr-1" />
@@ -522,6 +562,48 @@ export const UserPortal: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Acknowledge Receipt / Signature Dialog */}
+      <Dialog open={ackDialogOpen} onOpenChange={setAckDialogOpen}>
+        <DialogContent className="max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle>Acknowledge Receipt of Equipment</DialogTitle>
+            <DialogDescription>
+              Confirm receipt of <strong>{ackAsset?.asset_name}</strong> ({ackAsset?.asset_code})
+              by signing below. Your signature will be recorded on the issue note.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="ack-signature">Signature (type your full name) *</Label>
+              <Input
+                id="ack-signature"
+                type="text"
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+                placeholder="e.g., Jane Njeri"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ack-date">Date Received *</Label>
+              <Input
+                id="ack-date"
+                type="date"
+                value={receivedDate}
+                onChange={(e) => setReceivedDate(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={() => setAckDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleAcknowledge} disabled={acknowledging !== null || !signature.trim() || !receivedDate}>
+                {acknowledging !== null ? 'Signing...' : 'Sign & Acknowledge'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

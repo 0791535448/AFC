@@ -1,8 +1,13 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 
 export const IssueNotesContent = () => {
+  const { user } = useAuth()
+  const isSuperAdmin = user?.role === 'Super Admin'
+  const loggedInName = user?.full_name || ''
+  const loggedInRole = user?.role || ''
   const [formData, setFormData] = useState({
     to: '',
     from: 'ICT',
@@ -18,15 +23,28 @@ export const IssueNotesContent = () => {
     receivedByDate: ''
   })
   const [items, setItems] = useState([
-    { item: '', serialNumber: '', tagNumber: '' }
+    { asset_id: '', item: '', serialNumber: '', tagNumber: '' }
   ])
   const [branches, setBranches] = useState<{ id: number; branch_name: string }[]>([])
   const [officers, setOfficers] = useState<{ id: number; username: string; full_name: string; role: string }[]>([])
   const [allUsers, setAllUsers] = useState<{ id: number; username: string; full_name: string; role: string }[]>([])
+  const [assets, setAssets] = useState<{ id: number; asset_code: string; asset_name: string; serial_number: string; brand: string }[]>([])
+  const [savedNotes, setSavedNotes] = useState<any[]>([])
+  const [editingNote, setEditingNote] = useState<any | null>(null)
+  const [editForm, setEditForm] = useState({ receivedByName: '', receivedByDesignation: '', receivedByDate: '' })
+  const [editSaving, setEditSaving] = useState(false)
   const [submitMessage, setSubmitMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  const loadNotes = () => {
+    fetch('http://localhost:8000/api/issue-notes')
+      .then(r => r.json())
+      .then(d => setSavedNotes(d.issue_notes || []))
+      .catch(() => {})
+  }
+
   useEffect(() => {
+    loadNotes()
     fetch('http://localhost:8000/api/branches')
       .then(r => r.json())
       .then(data => setBranches(data.branches || []))
@@ -39,10 +57,43 @@ export const IssueNotesContent = () => {
         setOfficers(list.filter((u: any) => ['ICT Officer', 'Technician'].includes(u.role)))
       })
       .catch(() => {})
+    fetch('http://localhost:8000/dev/assets')
+      .then(r => r.json())
+      .then(data => setAssets(Array.isArray(data) ? data : []))
+      .catch(() => {})
   }, [])
+
+  // Auto-fill issuing officer from the logged-in account
+  useEffect(() => {
+    if (user?.full_name) {
+      setFormData(prev => ({
+        ...prev,
+        issuingOfficer: prev.issuingOfficer || user.full_name,
+        issuingOfficerRole: prev.issuingOfficerRole !== 'ICT Officer' ? prev.issuingOfficerRole : (user.role || prev.issuingOfficerRole)
+      }))
+    }
+  }, [user])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Issue note cannot be submitted incomplete
+    const missing: string[] = []
+    if (!formData.to) missing.push('TO (Department/Branch)')
+    if (!formData.date) missing.push('DATE')
+    if (!formData.subject) missing.push('RE (Subject)')
+    if (!formData.issuingOfficer) missing.push('Name of Issuing Officer')
+    if (!formData.receivedByName) missing.push('Received By (Name)')
+    items.forEach((item, i) => {
+      if (!item.item.trim()) missing.push(`Item ${i + 1} name`)
+      if (!item.serialNumber.trim()) missing.push(`Item ${i + 1} serial number`)
+      if (!item.tagNumber.trim()) missing.push(`Item ${i + 1} tag number`)
+    })
+    if (missing.length > 0) {
+      setSubmitMessage(`Issue note is incomplete. Please fill in: ${missing.join(', ')}.`)
+      return
+    }
+
     setSubmitting(true)
     setSubmitMessage('')
     try {
@@ -67,11 +118,12 @@ export const IssueNotesContent = () => {
       const data = await response.json()
       if (!response.ok) throw new Error(data.detail || 'Failed to save')
       setSubmitMessage('Issue note saved successfully.')
-      setItems([{ item: '', serialNumber: '', tagNumber: '' }])
+      loadNotes()
+      setItems([{ asset_id: '', item: '', serialNumber: '', tagNumber: '' }])
       setFormData({
         to: '', from: 'ICT', ref: '', date: '', subject: '',
         message: 'Please acknowledge the receipt of the equipment issued;',
-        issuingOfficer: '', issuingOfficerRole: 'ICT Officer',
+        issuingOfficer: loggedInName, issuingOfficerRole: loggedInRole || 'ICT Officer',
         receivedByName: '', receivedByDesignation: '', receivedBySign: '', receivedByDate: ''
       })
     } catch (err: any) {
@@ -90,36 +142,104 @@ export const IssueNotesContent = () => {
   }
 
   const addItem = () => {
-    setItems(prev => [...prev, { item: '', serialNumber: '', tagNumber: '' }])
+    setItems(prev => [...prev, { asset_id: '', item: '', serialNumber: '', tagNumber: '' }])
+  }
+
+  const handleAssetPick = (index: number, assetId: string) => {
+    const asset = assets.find(a => String(a.id) === assetId)
+    setItems(prev => prev.map((item, i) => i === index ? {
+      ...item,
+      asset_id: assetId,
+      item: asset ? `${asset.asset_name} (${asset.asset_code})` : item.item,
+      serialNumber: asset?.serial_number || item.serialNumber,
+      tagNumber: asset?.asset_code || item.tagNumber
+    } : item))
   }
 
   const removeItem = (index: number) => {
     if (items.length > 1) setItems(prev => prev.filter((_, i) => i !== index))
   }
 
+  const openEditNote = (note: any) => {
+    setEditingNote(note)
+    setEditForm({
+      receivedByName: note.received_by_name || '',
+      receivedByDesignation: note.received_by_designation || '',
+      receivedByDate: (note.date_out || '').toString().slice(0, 10)
+    })
+  }
+
+  const handleEditNote = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingNote) return
+    setEditSaving(true)
+    try {
+      const res = await fetch(`http://localhost:8000/api/issue-notes/${editingNote.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receivedByName: editForm.receivedByName,
+          receivedByDesignation: editForm.receivedByDesignation,
+          receivedByDate: editForm.receivedByDate || null
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Failed to update')
+      setEditingNote(null)
+      loadNotes()
+    } catch (err: any) {
+      alert(err.message || 'Failed to update issue note')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
   const inputCls = "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
   const labelCls = "block text-sm font-medium text-gray-700 mb-2"
 
-  const handlePrint = () => {
+  const handlePrint = (note?: any) => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
     const esc = (s: string) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-    const itemRows = items.map((item, i) => `
+    const src = note ? {
+      to: note.to_department,
+      from: note.from_location || 'ICT',
+      ref: note.ref,
+      date: note.date_in || note.date,
+      subject: note.subject,
+      message: note.message,
+      issuingOfficer: note.issuing_officer,
+      issuingOfficerRole: note.issuing_officer_role,
+      receivedByName: note.received_by_name,
+      receivedByDesignation: note.received_by_designation,
+      receivedByDate: note.date_out,
+      receivedBySign: note.received_by_signature
+    } : { ...formData, receivedBySign: '' }
+
+    let printItems = items
+    if (note) {
+      try { printItems = JSON.parse(note.items || '[]') } catch { printItems = [] }
+    }
+
+    const itemRows = printItems.map((item: any) => `
       <tr>
         <td style="border:1px solid #000;padding:6px;">${esc(item.item)}</td>
         <td style="border:1px solid #000;padding:6px;">${esc(item.serialNumber)}</td>
         <td style="border:1px solid #000;padding:6px;">${esc(item.tagNumber)}</td>
       </tr>`).join('')
 
+    const baseUrl = window.location.origin
+
     printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <title>Issue Note</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 40px; color: #000; font-size: 13px; }
-    .header { text-align: center; margin-bottom: 20px; }
+    body { font-family: Arial, sans-serif; margin: 40px; color: #000; font-size: 13px; position: relative; }
+    .header { text-align: center; margin-bottom: 10px; }
+    .header img.logo { height: 90px; margin-bottom: 6px; }
     .header h1 { font-size: 18px; margin: 0; }
     .header h2 { font-size: 15px; margin: 4px 0; }
     .header h3 { font-size: 14px; margin: 4px 0; font-weight: bold; }
@@ -131,28 +251,34 @@ export const IssueNotesContent = () => {
     .received { margin-top: 40px; }
     .received .line { border-bottom: 1px solid #000; height: 30px; }
     .note { margin-top: 24px; font-size: 11px; font-style: italic; }
+    .doc-footer { position: fixed; bottom: 20px; left: 0; right: 0; font-size: 10px; color: #555; }
+    .doc-footer .cert-left { position: absolute; left: 0; bottom: 0; text-align: center; }
+    .doc-footer .cert-right { position: absolute; right: 0; bottom: 0; }
+    .doc-footer img { height: 55px; vertical-align: middle; }
+    .doc-footer .cert-text { display: block; font-weight: bold; letter-spacing: 1px; font-size: 9px; margin-top: 2px; }
   </style>
 </head>
 <body>
   <div class="header">
+    <img class="logo" src="${baseUrl}/images/afc-logo.jpeg" alt="AFC Logo" />
     <h1>Agricultural Finance Corporation</h1>
     <h2>ICT Department</h2>
     <h3>Issue Note</h3>
   </div>
   <table class="meta-table">
     <tr>
-      <td style="width:33%;"><b>TO:</b> ${esc(formData.to) || '______________'}</td>
-      <td style="width:33%;"><b>FROM:</b> ${esc(formData.from) || 'ICT'}</td>
-      <td style="width:33%;"><b>REF:</b> ${esc(formData.ref) || '______________'}</td>
+      <td style="width:33%;"><b>TO:</b> ${esc(src.to) || '______________'}</td>
+      <td style="width:33%;"><b>FROM:</b> ${esc(src.from) || 'ICT'}</td>
+      <td style="width:33%;"><b>REF:</b> ${esc(src.ref) || '______________'}</td>
     </tr>
     <tr>
-      <td colspan="3"><b>DATE:</b> ${esc(formData.date) || '______________'}</td>
+      <td colspan="3"><b>DATE:</b> ${esc(src.date) || '______________'}</td>
     </tr>
     <tr>
-      <td colspan="3"><b>RE:</b> ${esc(formData.subject) || '______________'}</td>
+      <td colspan="3"><b>RE:</b> ${esc(src.subject) || '______________'}</td>
     </tr>
   </table>
-  <div>${esc(formData.message) || '&nbsp;'}</div>
+  <div>${esc(src.message) || '&nbsp;'}</div>
   <table class="grid">
     <thead>
       <tr>
@@ -164,8 +290,8 @@ export const IssueNotesContent = () => {
     <tbody>${itemRows}</tbody>
   </table>
   <div style="margin-top:20px;">
-    <b>NAME OF ISSUING OFFICER:</b> ${esc(formData.issuingOfficer) || '______________'}<br/>
-    <b>${esc(formData.issuingOfficerRole) || 'ICT OFFICER'}</b>
+    <b>NAME OF ISSUING OFFICER:</b> ${esc(src.issuingOfficer) || '______________'}<br/>
+    <b>${esc(src.issuingOfficerRole) || 'ICT OFFICER'}</b>
   </div>
   <div class="received">
     <b>RECEIVED BY:</b>
@@ -177,9 +303,18 @@ export const IssueNotesContent = () => {
       Signature <span class="line" style="display:inline-block;width:280px;vertical-align:bottom;margin-left:8px;"></span>
       Date <span class="line" style="display:inline-block;width:200px;vertical-align:bottom;margin-left:8px;"></span>
     </div>
-    ${formData.receivedByName ? `<div style="margin-top:10px;font-size:12px;">Received by: ${esc(formData.receivedByName)}${formData.receivedByDesignation ? ` (${esc(formData.receivedByDesignation)})` : ''}</div>` : ''}
+    ${src.receivedByName ? `<div style="margin-top:10px;font-size:12px;">Received by: ${esc(src.receivedByName)}${src.receivedByDesignation ? ` (${esc(src.receivedByDesignation)})` : ''}${src.receivedBySign ? ` — Signed: ${esc(src.receivedBySign)}` : ''}</div>` : ''}
   </div>
   <div class="note">N/B: Please sign and return a copy of this issue note for our records.</div>
+  <div class="doc-footer">
+    <div class="cert-left">
+      <img src="${baseUrl}/images/iso-9001.jpeg" alt="ISO 9001" />
+      <span class="cert-text">ISO 9001:2015<br/>CERTIFIED</span>
+    </div>
+    <div class="cert-right">
+      <img src="${baseUrl}/images/iso-mark.png" alt="Certification Mark" />
+    </div>
+  </div>
   <script>window.onload = function() { window.print(); }</script>
 </body>
 </html>`)
@@ -234,6 +369,7 @@ export const IssueNotesContent = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Asset</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Serial Number</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tag Number</th>
@@ -243,6 +379,20 @@ export const IssueNotesContent = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {items.map((item, index) => (
                     <tr key={index}>
+                      <td className="px-3 py-2">
+                        <select
+                          value={item.asset_id}
+                          onChange={(e) => handleAssetPick(index, e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                        >
+                          <option value="">Select asset...</option>
+                          {assets.map(a => (
+                            <option key={a.id} value={String(a.id)}>
+                              {a.asset_code} — {a.asset_name}{a.brand ? ` (${a.brand})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="px-3 py-2"><input type="text" value={item.item} onChange={(e) => handleItemChange(index, 'item', e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="e.g., 4G FDD LTE MOBILE WIFI" required /></td>
                       <td className="px-3 py-2"><input type="text" value={item.serialNumber} onChange={(e) => handleItemChange(index, 'serialNumber', e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="e.g., A01220FBCAD3" /></td>
                       <td className="px-3 py-2"><input type="text" value={item.tagNumber} onChange={(e) => handleItemChange(index, 'tagNumber', e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="e.g., N/A" /></td>
@@ -260,29 +410,21 @@ export const IssueNotesContent = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>NAME OF ISSUING OFFICER *</label>
-              <select value={formData.issuingOfficer} onChange={(e) => {
-                const name = e.target.value
-                const u = officers.find(o => o.full_name === name)
-                handleInputChange('issuingOfficer', name)
-                if (u) handleInputChange('issuingOfficerRole', u.role)
-              }} className={inputCls} required>
-                <option value="">Select officer...</option>
-                {officers.map(o => <option key={o.id} value={o.full_name}>{o.full_name} (@{o.username})</option>)}
-              </select>
+              <input type="text" value={formData.issuingOfficer} readOnly className={`${inputCls} bg-gray-100 cursor-not-allowed`} title="Auto-filled from your logged-in account" />
             </div>
             <div>
               <label className={labelCls}>DESIGNATION</label>
-              <input type="text" value={formData.issuingOfficerRole} onChange={(e) => handleInputChange('issuingOfficerRole', e.target.value)} className={inputCls} />
+              <input type="text" value={formData.issuingOfficerRole} readOnly className={`${inputCls} bg-gray-100 cursor-not-allowed`} title="Auto-filled from your account role" />
             </div>
           </div>
 
           {/* Received by */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className={labelCls}>RECEIVED BY (Name)</label>
-              <select value={formData.receivedByName} onChange={(e) => handleInputChange('receivedByName', e.target.value)} className={inputCls}>
+              <label className={labelCls}>RECEIVED BY (Name) *</label>
+              <select value={formData.receivedByName} onChange={(e) => handleInputChange('receivedByName', e.target.value)} className={inputCls} required>
                 <option value="">Select user...</option>
-                {allUsers.map(o => <option key={o.id} value={o.full_name}>{o.full_name} (@{o.username})</option>)}
+                {allUsers.map(o => <option key={o.id} value={o.full_name}>{o.full_name}</option>)}
               </select>
             </div>
             <div>
@@ -291,7 +433,7 @@ export const IssueNotesContent = () => {
             </div>
             <div>
               <label className={labelCls}>Date Received</label>
-              <input type="date" value={formData.receivedByDate} onChange={(e) => handleInputChange('receivedByDate', e.target.value)} className={inputCls} />
+              <input type="text" value="Entered by recipient on acknowledgment" readOnly className={`${inputCls} bg-gray-100 cursor-not-allowed text-gray-500`} />
             </div>
           </div>
 
@@ -320,6 +462,96 @@ export const IssueNotesContent = () => {
           </div>
         </form>
       </div>
+
+      {/* Posted Issue Notes */}
+      <div className="bg-white rounded-lg shadow p-6 mt-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Posted Issue Notes</h3>
+        {savedNotes.length === 0 ? (
+          <p className="text-sm text-gray-500">No issue notes posted yet.</p>
+        ) : (
+          <div className="overflow-x-auto border border-gray-300 rounded-md">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ref</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">TO</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">RE</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Issuing Officer</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Received By</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {savedNotes.map((note: any) => {
+                  let itemCount = 0
+                  try { itemCount = JSON.parse(note.items || '[]').length } catch { itemCount = 0 }
+                  return (
+                    <tr key={note.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm text-gray-700 whitespace-nowrap">{(note.date_in || note.date || '').toString().slice(0, 10)}</td>
+                      <td className="px-3 py-2 text-sm text-gray-700">{note.ref || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-700">{note.to_department || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-700">{note.subject || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-700">{note.issuing_officer || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-700">{note.received_by_name || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-700">{itemCount}</td>
+                      <td className="px-3 py-2">
+                        {note.status === 'Acknowledged' ? (
+                          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">Acknowledged</span>
+                        ) : (
+                          <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-800">Pending</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-sm space-x-2 whitespace-nowrap">
+                        <button onClick={() => handlePrint(note)} className="text-blue-600 hover:text-blue-800 font-medium">Print</button>
+                        <button onClick={() => handlePrint(note)} className="text-green-600 hover:text-green-800 font-medium" title="Opens print dialog — choose 'Save as PDF' to export">Export PDF</button>
+                        {isSuperAdmin && (
+                          <button onClick={() => openEditNote(note)} className="text-amber-600 hover:text-amber-800 font-medium">Edit</button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Edit Issue Note Modal */}
+      {editingNote && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Edit Issue Note</h3>
+            <p className="text-sm text-gray-500 mb-4">Ref: {editingNote.ref || '—'} • {editingNote.subject || ''}</p>
+            <form onSubmit={handleEditNote} className="space-y-4">
+              <div>
+                <label className={labelCls}>Received By (Name)</label>
+                <select value={editForm.receivedByName} onChange={(e) => setEditForm(f => ({ ...f, receivedByName: e.target.value }))} className={inputCls}>
+                  <option value="">Select user...</option>
+                  {allUsers.map(o => <option key={o.id} value={o.full_name}>{o.full_name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Designation</label>
+                <input type="text" value={editForm.receivedByDesignation} onChange={(e) => setEditForm(f => ({ ...f, receivedByDesignation: e.target.value }))} placeholder="e.g., Branch Manager" className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Date Received</label>
+                <input type="date" value={editForm.receivedByDate} onChange={(e) => setEditForm(f => ({ ...f, receivedByDate: e.target.value }))} className={inputCls} />
+              </div>
+              <div className="flex justify-end space-x-3">
+                <button type="button" onClick={() => setEditingNote(null)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button type="submit" disabled={editSaving} className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50">
+                  {editSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -416,6 +648,7 @@ export const RepairFormContent = () => {
     if (!printWindow) return
 
     const esc = (s: string) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const baseUrl = window.location.origin
 
     const itemRows = items.map((item, i) => `
       <tr>
@@ -428,45 +661,48 @@ export const RepairFormContent = () => {
         <td style="border:1px solid #000;padding:6px;white-space:pre-wrap;">${esc(item.remarks)}</td>
       </tr>`).join('')
 
-    const signLine = (label: string, name: string, sign: string, date: string) => `
-      <td style="border:1px solid #000;padding:8px;vertical-align:top;">
-        <div style="font-size:11px;color:#555;">${label}</div>
-        <div style="margin-top:24px;">Name: <b>${esc(name)}</b></div>
-        <div style="margin-top:8px;">Sign: ${esc(sign) || '______________'}</div>
-        <div style="margin-top:8px;">Date: ${esc(date) || '______________'}</div>
-      </td>`
-
     printWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
   <title>Computer Repair and Maintenance Memo</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 30px; color: #000; font-size: 13px; }
+    body { font-family: Tahoma, Arial, sans-serif; margin: 30px; color: #000; font-size: 13px; position: relative; }
     .header { text-align: center; margin-bottom: 16px; }
-    .header h1 { font-size: 18px; margin: 0; }
-    .header h2 { font-size: 15px; margin: 4px 0; }
-    .header h3 { font-size: 13px; margin: 4px 0; font-weight: normal; }
-    .meta { display: flex; justify-content: space-between; margin: 12px 0; }
+    .header img.logo { height: 110px; margin-bottom: 6px; }
+    .header h1 { font-size: 16px; margin: 0; }
+    .header h2 { font-size: 14px; margin: 2px 0; }
+    .header h3 { font-size: 13px; margin: 2px 0; font-weight: bold; }
+    .meta { margin: 12px 0; }
     table.grid { width: 100%; border-collapse: collapse; margin-top: 10px; }
     table.grid th, table.grid td { border: 1px solid #000; padding: 6px; font-size: 12px; text-align: left; }
     table.grid th { background: #eee; }
-    .sig-table { width: 100%; border-collapse: collapse; margin-top: 30px; }
-    .note { margin-top: 20px; font-size: 11px; font-style: italic; }
+    .sign-row { display: flex; justify-content: space-between; margin-top: 30px; }
+    .sign-item { width: 48%; font-size: 13px; }
+    .sign-item .lbl { margin-bottom: 45px; }
+    .uline { display: inline-block; border-bottom: 1px solid #000; height: 18px; min-width: 140px; vertical-align: bottom; }
+    .note { margin-top: 24px; font-size: 11px; font-style: italic; }
+    .doc-footer { position: fixed; bottom: 20px; left: 0; right: 0; font-size: 10px; color: #555; }
+    .doc-footer .cert-left { position: absolute; left: 0; bottom: 0; text-align: center; }
+    .doc-footer .cert-right { position: absolute; right: 0; bottom: 0; }
+    .doc-footer img { height: 55px; vertical-align: middle; }
+    .doc-footer .cert-text { display: block; font-weight: bold; letter-spacing: 1px; font-size: 9px; margin-top: 2px; }
   </style>
 </head>
 <body>
   <div class="header">
+    <img class="logo" src="${baseUrl}/images/afc-logo.jpeg" alt="AFC Logo" />
     <h1>AGRICULTURAL FINANCE CORPORATION</h1>
     <h2>ICT DIVISION</h2>
     <h3>COMPUTER REPAIR AND MAINTENANCE MEMO</h3>
   </div>
   <div class="meta">
-    <div><b>BRANCH:</b> ${esc(formData.branch) || '______________'}</div>
-    <div><b>DATE IN:</b> ${esc(formData.dateIn) || '______________'}</div>
+    <b>BRANCH:</b> ${esc(formData.branch) || '______________'}
+    &nbsp;&nbsp;&nbsp;&nbsp;
+    <b>DATE IN:</b> ${esc(formData.dateIn) || '______________'}
   </div>
   <div style="margin-bottom:10px;">
     <b>RECEIVED BY (ICT):</b> ${esc(formData.receivedBy) || '______________'}
-    &nbsp;&nbsp;&nbsp; <b>SIGN:</b> ______________________
+    &nbsp;&nbsp;&nbsp; <b>SIGN:</b> <span class="uline" style="width:200px;"></span>
   </div>
   <table class="grid">
     <thead>
@@ -483,16 +719,34 @@ export const RepairFormContent = () => {
     <tbody>${itemRows}</tbody>
   </table>
   <div style="margin-top:14px;">
-    <b>Comment by BM/HOD:</b> ${esc(formData.commentByHod) || '____________________________________________________________________________________________'}
+    <b>Comment by BM/HOD</b> <span class="uline" style="width:70%;"></span>
+    ${formData.commentByHod ? `<div style="margin-top:4px;">${esc(formData.commentByHod)}</div>` : ''}
   </div>
-  <table class="sig-table">
-    <tr>
-      ${signLine('Prepared By:', formData.preparedByName, formData.preparedBySign, formData.preparedByDate)}
-      ${signLine('Confirmed By:', formData.confirmedByName, formData.confirmedBySign, formData.confirmedByDate)}
-      ${signLine('Received by (BM/HOD):', formData.receivedByHodName, formData.receivedByHodSign, formData.receivedByHodDate)}
-    </tr>
-  </table>
+  <div class="sign-row">
+    <div class="sign-item">
+      <div class="lbl"><b>Prepared By:</b> ${esc(formData.preparedByName) || '______________'}</div>
+      <div><b>Sign.</b> ${formData.preparedBySign ? esc(formData.preparedBySign) : '<span class="uline" style="width:160px;"></span>'} &nbsp; <b>Date:</b> ${esc(formData.preparedByDate) || '______________'}</div>
+    </div>
+    <div class="sign-item">
+      <div class="lbl"><b>Confirmed By:</b> ${esc(formData.confirmedByName) || '______________'}</div>
+      <div><b>Sign.</b> ${formData.confirmedBySign ? esc(formData.confirmedBySign) : '<span class="uline" style="width:160px;"></span>'} &nbsp; <b>Date:</b> ${esc(formData.confirmedByDate) || '______________'}</div>
+    </div>
+  </div>
+  <div style="margin-top:30px;">
+    <b>Received by (BM/HOD)</b> ${formData.receivedByHodName ? esc(formData.receivedByHodName) : '<span class="uline" style="width:30%;"></span>'}
+    &nbsp;&nbsp; <b>Sign:</b> ${formData.receivedByHodSign ? esc(formData.receivedByHodSign) : '<span class="uline" style="width:160px;"></span>'}
+    &nbsp;&nbsp; <b>Date:</b> ${esc(formData.receivedByHodDate) || '______________'}
+  </div>
   <div class="note">N/B: Please sign and return a copy of this memo for our records.</div>
+  <div class="doc-footer">
+    <div class="cert-left">
+      <img src="${baseUrl}/images/iso-9001.jpeg" alt="ISO 9001" />
+      <span class="cert-text">ISO 9001:2015<br/>CERTIFIED</span>
+    </div>
+    <div class="cert-right">
+      <img src="${baseUrl}/images/iso-mark.png" alt="Certification Mark" />
+    </div>
+  </div>
   <script>window.onload = function() { window.print(); }</script>
 </body>
 </html>`)
@@ -521,7 +775,7 @@ export const RepairFormContent = () => {
               <label className={labelCls}>RECEIVED BY (ICT)</label>
               <select value={formData.receivedBy} onChange={(e) => handleInputChange('receivedBy', e.target.value)} className={inputCls} required>
                 <option value="">Select officer...</option>
-                {officers.map(o => <option key={o.id} value={o.full_name}>{o.full_name} (@{o.username})</option>)}
+                {officers.map(o => <option key={o.id} value={o.full_name}>{o.full_name}</option>)}
               </select>
             </div>
           </div>
@@ -578,7 +832,7 @@ export const RepairFormContent = () => {
               <label className={labelCls}>PREPARED BY</label>
               <select value={formData.preparedByName} onChange={(e) => handleInputChange('preparedByName', e.target.value)} className={inputCls}>
                 <option value="">Select user...</option>
-                {officers.map(o => <option key={o.id} value={o.full_name}>{o.full_name} (@{o.username})</option>)}
+                {officers.map(o => <option key={o.id} value={o.full_name}>{o.full_name}</option>)}
               </select>
               <input type="text" value={formData.preparedBySign} onChange={(e) => handleInputChange('preparedBySign', e.target.value)} placeholder="Signature" className={`${inputCls} mt-2`} />
               <input type="date" value={formData.preparedByDate} onChange={(e) => handleInputChange('preparedByDate', e.target.value)} className={`${inputCls} mt-2`} title="Date" />
@@ -587,7 +841,7 @@ export const RepairFormContent = () => {
               <label className={labelCls}>CONFIRMED BY</label>
               <select value={formData.confirmedByName} onChange={(e) => handleInputChange('confirmedByName', e.target.value)} className={inputCls}>
                 <option value="">Select user...</option>
-                {allUsers.map(o => <option key={o.id} value={o.full_name}>{o.full_name} (@{o.username})</option>)}
+                {allUsers.map(o => <option key={o.id} value={o.full_name}>{o.full_name}</option>)}
               </select>
               <input type="text" value={formData.confirmedBySign} onChange={(e) => handleInputChange('confirmedBySign', e.target.value)} placeholder="Signature" className={`${inputCls} mt-2`} />
               <input type="date" value={formData.confirmedByDate} onChange={(e) => handleInputChange('confirmedByDate', e.target.value)} className={`${inputCls} mt-2`} title="Date" />
@@ -596,7 +850,7 @@ export const RepairFormContent = () => {
               <label className={labelCls}>RECEIVED BY (BM/HOD)</label>
               <select value={formData.receivedByHodName} onChange={(e) => handleInputChange('receivedByHodName', e.target.value)} className={inputCls}>
                 <option value="">Select user...</option>
-                {allUsers.map(o => <option key={o.id} value={o.full_name}>{o.full_name} (@{o.username})</option>)}
+                {allUsers.map(o => <option key={o.id} value={o.full_name}>{o.full_name}</option>)}
               </select>
               <input type="text" value={formData.receivedByHodSign} onChange={(e) => handleInputChange('receivedByHodSign', e.target.value)} placeholder="Signature" className={`${inputCls} mt-2`} />
               <input type="date" value={formData.receivedByHodDate} onChange={(e) => handleInputChange('receivedByHodDate', e.target.value)} className={`${inputCls} mt-2`} title="Date" />

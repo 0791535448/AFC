@@ -26,7 +26,8 @@ import {
   CheckCircle,
   XCircle,
   Lock,
-  Activity
+  Activity,
+  KeyRound
 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
@@ -37,13 +38,18 @@ interface User {
   full_name: string
   phone?: string
   department?: string
-  role: 'Super Admin' | 'Admin' | 'Technician' | 'ICT Officer' | 'User'
+  role: 'Super Admin' | 'Admin' | 'Technician' | 'ICT Officer' | 'Senior ICT Officer' | 'ICT Intern' | 'User'
   is_active: boolean
   created_at: string
   last_login?: string
 }
 
-export const AllUsers: React.FC = () => {
+interface AllUsersProps {
+  fixedRole?: string
+  title?: string
+}
+
+export const AllUsers: React.FC<AllUsersProps> = ({ fixedRole, title }) => {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -62,6 +68,10 @@ export const AllUsers: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [branchList, setBranchList] = useState<any[]>([])
+  const [resetUser, setResetUser] = useState<User | null>(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
 
   // Load users and branches from API
   useEffect(() => {
@@ -109,7 +119,7 @@ export const AllUsers: React.FC = () => {
         user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTerm.toLowerCase())
 
-      const matchesRole = filters.role === '' || user.role === filters.role
+      const matchesRole = (filters.role === '' || user.role === filters.role) && (!fixedRole || user.role === fixedRole)
       const matchesDepartment = filters.department === '' || user.department === filters.department
       const matchesStatus = filters.status === '' || 
         (filters.status === 'active' && user.is_active) ||
@@ -132,6 +142,9 @@ export const AllUsers: React.FC = () => {
       case 'Super Admin': return 'bg-red-100 text-red-800'
       case 'Admin': return 'bg-purple-100 text-purple-800'
       case 'Technician': return 'bg-green-100 text-green-800'
+      case 'ICT Officer': return 'bg-teal-100 text-teal-800'
+      case 'Senior ICT Officer': return 'bg-emerald-100 text-emerald-800'
+      case 'ICT Intern': return 'bg-sky-100 text-sky-800'
       case 'User': return 'bg-gray-100 text-gray-800'
       default: return 'bg-gray-100 text-gray-800'
     }
@@ -185,6 +198,33 @@ export const AllUsers: React.FC = () => {
       console.error('Error updating user:', error)
       setMessage(error instanceof Error ? error.message : 'Error updating user')
       setTimeout(() => setMessage(''), 3000)
+    }
+  }
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resetUser) return
+    setResetLoading(true)
+    try {
+      const response = await fetch(`http://localhost:8000/api/users/${resetUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: resetPassword })
+      })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.detail || 'Failed to reset password')
+      }
+      setMessage(`Password reset for ${resetUser.username}`)
+      setResetDialogOpen(false)
+      setResetUser(null)
+      setResetPassword('')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Error resetting password')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -293,7 +333,7 @@ export const AllUsers: React.FC = () => {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-blue-800">All Users</CardTitle>
+              <CardTitle className="text-blue-800">{title || 'All Users'}</CardTitle>
               <CardDescription className="text-blue-700">Manage system users and permissions</CardDescription>
             </div>
             <div className="flex items-center space-x-2">
@@ -356,6 +396,8 @@ export const AllUsers: React.FC = () => {
                     <SelectItem value="Admin">Admin</SelectItem>
                     <SelectItem value="Technician">Technician</SelectItem>
                     <SelectItem value="ICT Officer">ICT Officer</SelectItem>
+                    <SelectItem value="Senior ICT Officer">Senior ICT Officer</SelectItem>
+                    <SelectItem value="ICT Intern">ICT Intern</SelectItem>
                     <SelectItem value="User">User</SelectItem>
                   </SelectContent>
                 </Select>
@@ -465,6 +507,18 @@ export const AllUsers: React.FC = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => {
+                              setResetUser(user)
+                              setResetPassword('')
+                              setResetDialogOpen(true)
+                            }}
+                            title="Reset password"
+                          >
+                            <KeyRound className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
                               setEditingUser(user)
                               setIsEditModalOpen(true)
                             }}
@@ -535,6 +589,44 @@ export const AllUsers: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Reset Password Modal */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent className="max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center space-x-2">
+              <KeyRound className="h-5 w-5 text-indigo-600" />
+              <span>Reset Password</span>
+            </DialogTitle>
+            <DialogDescription>
+              Set a new password for <strong>{resetUser?.full_name}</strong> (@{resetUser?.username})
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="reset-new-password">New Password</Label>
+              <Input
+                id="reset-new-password"
+                type="password"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                required
+                minLength={6}
+                disabled={resetLoading}
+              />
+            </div>
+            <div className="flex justify-end space-x-2">
+              <Button type="button" variant="outline" onClick={() => setResetDialogOpen(false)} disabled={resetLoading}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={resetLoading}>
+                {resetLoading ? 'Resetting...' : 'Reset Password'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit User Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
@@ -699,6 +791,8 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel, branchLis
               <SelectItem value="Admin">Admin</SelectItem>
               <SelectItem value="Technician">Technician</SelectItem>
               <SelectItem value="ICT Officer">ICT Officer</SelectItem>
+              <SelectItem value="Senior ICT Officer">Senior ICT Officer</SelectItem>
+              <SelectItem value="ICT Intern">ICT Intern</SelectItem>
               <SelectItem value="User">User</SelectItem>
             </SelectContent>
           </Select>

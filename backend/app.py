@@ -3,7 +3,7 @@ ICT Infrastructure Automation System
 Backend API using FastAPI
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
@@ -346,6 +346,14 @@ async def create_user_api(user: dict):
         return {"message": "User created successfully", "user_id": cursor.lastrowid}
     except mysql.connector.Error as err:
         conn.rollback()
+        print(f"[create_user] MySQL error for {user.get('username')}: {err}")
+        raise HTTPException(status_code=400, detail=str(err))
+    except HTTPException as he:
+        print(f"[create_user] Rejected {user.get('username')}: {he.detail}")
+        raise
+    except Exception as err:
+        conn.rollback()
+        print(f"[create_user] Unexpected error for {user.get('username')}: {err}")
         raise HTTPException(status_code=400, detail=str(err))
     finally:
         cursor.close()
@@ -1142,7 +1150,7 @@ async def delete_status(status_id: int):
         conn.close()
 
 # Software CRUD endpoints
-@app.get("/api/software", response_model=List[dict])
+@app.get("/api/software")
 async def get_software():
     """Get all software"""
     conn = get_db_connection()
@@ -1249,8 +1257,23 @@ async def create_fault_report(report: dict):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("SELECT COUNT(*) AS cnt FROM fault_reports")
-        ticket_number = f"FR-{datetime.now().year}-{cursor.fetchone()['cnt'] + 1:04d}"
+        year = datetime.now().year
+        cursor.execute("SELECT ticket_number FROM fault_reports WHERE ticket_number LIKE %s", (f"FR-{year}-%",))
+        used = {r['ticket_number'] for r in cursor.fetchall()}
+        seq = 1
+        while f"FR-{year}-{seq:04d}" in used:
+            seq += 1
+        ticket_number = f"FR-{year}-{seq:04d}"
+
+        category = report.get('category', 'other')
+        if category not in ('hardware', 'software', 'network', 'account', 'other'):
+            category = 'other'
+        priority = report.get('priority', 'Medium')
+        if priority not in ('Low', 'Medium', 'High', 'Critical'):
+            priority = 'Medium'
+
+        def clamp(v, n):
+            return (v or '')[:n] if isinstance(v, str) else v
 
         cursor.execute("""
             INSERT INTO fault_reports
@@ -1258,19 +1281,26 @@ async def create_fault_report(report: dict):
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             ticket_number,
-            report.get('subject'),
+            clamp(report.get('subject'), 255),
             report.get('description'),
-            report.get('category', 'other'),
-            report.get('priority', 'Medium'),
-            report.get('reported_by'),
-            report.get('assigned_to'),
-            report.get('department'),
-            report.get('asset_tag'),
+            category,
+            priority,
+            clamp(report.get('reported_by'), 255),
+            clamp(report.get('assigned_to'), 255),
+            clamp(report.get('department'), 100),
+            clamp(report.get('asset_tag'), 50),
         ))
         conn.commit()
+        officers = get_officer_usernames()
+        create_notifications(
+            officers,
+            'New Issue Reported',
+            f"{ticket_number}: {report.get('subject')} ({report.get('category', 'other')}, {report.get('priority', 'Medium')})",
+            'issue')
         return {"message": "Fault report submitted successfully", "ticket_number": ticket_number}
     except mysql.connector.Error as err:
         conn.rollback()
+        print(f"[create_fault_report] MySQL error: {err} | payload: { {k: (str(v)[:60]) for k, v in report.items()} }")
         raise HTTPException(status_code=400, detail=str(err))
     finally:
         cursor.close()
@@ -1279,8 +1309,10 @@ async def create_fault_report(report: dict):
 @app.put("/api/fault-reports/{report_id}")
 async def update_fault_report(report_id: int, report: dict):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
+        cursor.execute("SELECT ticket_number, subject, reported_by, assigned_to FROM fault_reports WHERE id = %s", (report_id,))
+        existing = cursor.fetchone() or {}
         updates = {}
         for field in ['subject', 'description', 'category', 'priority', 'status',
                       'resolution_notes', 'department', 'asset_tag', 'assigned_to', 'reported_by']:
@@ -1293,7 +1325,34 @@ async def update_fault_report(report_id: int, report: dict):
         set_clause = ', '.join(f"{f} = %s" for f in updates)
         cursor.execute(f"UPDATE fault_reports SET {set_clause} WHERE id = %s",
                        tuple(updates.values()) + (report_id,))
+        # Once a ticket is solved, archive its conversation thread (kept, not deleted)
+        if updates.get('status') in ('Resolved', 'Closed'):
+            ensure_ticket_comments_table(cursor)
+            cursor.execute("UPDATE ticket_comments SET archived = 1 WHERE report_id = %s AND archived = 0", (report_id,))
+        elif updates.get('status') in ('Submitted', 'In Progress'):
+            ensure_ticket_comments_table(cursor)
+            cursor.execute("UPDATE ticket_comments SET archived = 0 WHERE report_id = %s", (report_id,))
         conn.commit()
+
+        ticket = existing.get('ticket_number', f'#{report_id}')
+        subject = existing.get('subject', '')
+        if updates.get('status') and existing.get('reported_by'):
+            status_msg = {
+                'In Progress': 'is now being worked on',
+                'Resolved': 'has been resolved',
+                'Closed': 'has been closed',
+            }.get(updates['status'], f'status changed to {updates["status"]}')
+            create_notifications(
+                [existing['reported_by']],
+                'Issue Update',
+                f"Your issue {ticket} '{subject}' {status_msg}.",
+                'update')
+        if updates.get('assigned_to') and updates['assigned_to'] != existing.get('assigned_to'):
+            create_notifications(
+                [updates['assigned_to']],
+                'Issue Assigned to You',
+                f"You have been assigned issue {ticket}: '{subject}'.",
+                'assignment')
         return {"message": "Fault report updated successfully"}
     except mysql.connector.Error as err:
         conn.rollback()
@@ -1321,14 +1380,40 @@ async def assign_asset(asset_id: int, assignment: dict):
         conn.close()
 
 @app.post("/api/assets/{asset_id}/acknowledge")
-async def acknowledge_asset(asset_id: int):
+async def acknowledge_asset(asset_id: int, payload: dict = Body(default={})):
+    signature = (payload.get('signature') or '').strip() or None
+    received_date = payload.get('received_date') or None
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
             "UPDATE assets SET acknowledged_at = %s WHERE id = %s AND acknowledged_at IS NULL",
             (datetime.now(), asset_id),
         )
+        # Record the recipient's signature/date on any issue note covering this asset
+        if signature:
+            cursor.execute("SELECT id, items, received_by_signature FROM issue_notes WHERE is_active = TRUE")
+            for note in cursor.fetchall():
+                if note.get('received_by_signature'):
+                    continue
+                try:
+                    note_items = json.loads(note.get('items') or '[]')
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                note_asset_ids = [it.get('asset_id') for it in note_items if it.get('asset_id')]
+                if str(asset_id) not in [str(a) for a in note_asset_ids]:
+                    continue
+                cursor.execute(
+                    "UPDATE issue_notes SET received_by_signature = %s, date_out = %s WHERE id = %s",
+                    (signature, received_date or datetime.now().date(), note['id']))
+                # Mark the note Acknowledged only once every asset on it is acknowledged
+                placeholders = ','.join(['%s'] * len(note_asset_ids))
+                cursor.execute(
+                    f"SELECT COUNT(*) AS total, SUM(acknowledged_at IS NOT NULL) AS done FROM assets WHERE id IN ({placeholders})",
+                    note_asset_ids)
+                counts = cursor.fetchone() or {}
+                if counts.get('total') and counts.get('done') == counts.get('total'):
+                    cursor.execute("UPDATE issue_notes SET status = 'Acknowledged' WHERE id = %s", (note['id'],))
         conn.commit()
         return {"message": "Equipment receipt acknowledged"}
     except mysql.connector.Error as err:
@@ -1399,12 +1484,53 @@ async def get_issue_notes():
         cursor.close()
         conn.close()
 
-@app.post("/api/issue-notes")
-async def create_issue_note(data: dict):
+@app.put("/api/issue-notes/{note_id}")
+async def update_issue_note(note_id: int, data: dict):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        items = data.get('items') or []
+        updates = {}
+        aliases = {'received_by_name': 'received_by_name', 'received_by_designation': 'received_by_designation',
+                   'received_by_signature': 'received_by_signature', 'date_out': 'date_out', 'status': 'status',
+                   'receivedByName': 'received_by_name', 'receivedByDesignation': 'received_by_designation',
+                   'receivedBySign': 'received_by_signature', 'receivedByDate': 'date_out'}
+        for src, dst in aliases.items():
+            if data.get(src) is not None and dst not in updates:
+                updates[dst] = data[src]
+        if updates.get('date_out') == '':
+            updates['date_out'] = None
+        if not updates:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        set_clause = ', '.join(f"{f} = %s" for f in updates)
+        cursor.execute(f"UPDATE issue_notes SET {set_clause} WHERE id = %s", tuple(updates.values()) + (note_id,))
+        conn.commit()
+        return {"message": "Issue note updated successfully"}
+    except mysql.connector.Error as err:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(err))
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/issue-notes")
+async def create_issue_note(data: dict):
+    # Issue notes cannot be submitted incomplete
+    missing = [f for f in ['to_department', 'date', 'subject', 'issuing_officer', 'received_by_name']
+               if not (data.get(f) or data.get({'to_department': 'to', 'date': 'date_in'}.get(f, f)))]
+    items = data.get('items') or []
+    if not items:
+        missing.append('items')
+    else:
+        for idx, item in enumerate(items, 1):
+            for col in ('item', 'serialNumber', 'tagNumber'):
+                if not (item.get(col) or item.get({'serialNumber': 'serial_number', 'tagNumber': 'tag_number'}.get(col, col))):
+                    missing.append(f'items[{idx}].{col}')
+    if missing:
+        raise HTTPException(status_code=400, detail="Issue note is incomplete. Missing: " + ', '.join(missing))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
         first = items[0] if items else {}
         cursor.execute("""
             INSERT INTO issue_notes
@@ -1415,7 +1541,7 @@ async def create_issue_note(data: dict):
         """, (
             data.get('to_department') or data.get('to') or '',
             data.get('from_location') or data.get('from_location') or 'ICT',
-            data.get('date') or data.get('date_in'),
+            data.get('date') or data.get('date_in') or None,
             data.get('ref') or '',
             data.get('subject') or data.get('re') or '',
             json.dumps(items),
@@ -1426,10 +1552,24 @@ async def create_issue_note(data: dict):
             data.get('message'),
             data.get('received_by_name'),
             data.get('received_by_designation'),
-            data.get('date_out'),
+            data.get('date_out') or None,
         ))
+        new_id = cursor.lastrowid
         conn.commit()
-        return {"message": "Issue note saved successfully", "id": cursor.lastrowid}
+
+        # Assign any picked assets to the recipient
+        assignee = data.get('received_by_name') or data.get('issuing_officer')
+        if assignee:
+            for item in items:
+                asset_id = item.get('asset_id')
+                if asset_id:
+                    cursor.execute(
+                        "UPDATE assets SET assigned_to = %s, acknowledged_at = NULL WHERE id = %s",
+                        (assignee, asset_id),
+                    )
+            conn.commit()
+
+        return {"message": "Issue note saved successfully", "id": new_id}
     except mysql.connector.Error as err:
         conn.rollback()
         raise HTTPException(status_code=400, detail=str(err))
@@ -1566,6 +1706,314 @@ async def import_assets(file: UploadFile = File(...)):
     except Exception as err:
         conn.rollback()
         raise HTTPException(status_code=400, detail=str(err))
+    finally:
+        cursor.close()
+        conn.close()
+
+# ---------- Ticket Comments ----------
+
+def ensure_ticket_comments_table(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ticket_comments (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            report_id INT NOT NULL,
+            author VARCHAR(255) NOT NULL,
+            author_name VARCHAR(255),
+            message TEXT NOT NULL,
+            archived TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_report (report_id)
+        )
+    """)
+    cursor.execute(
+        "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ticket_comments' AND COLUMN_NAME = 'archived'")
+    if cursor.fetchone()['c'] == 0:
+        cursor.execute("ALTER TABLE ticket_comments ADD COLUMN archived TINYINT(1) NOT NULL DEFAULT 0")
+
+# A ticket conversation is between two users only: the reporter and the assigned officer.
+# While a ticket is unassigned, ICT staff may still join so it can be picked up.
+def _can_access_ticket(cursor, report_id: int, username: str):
+    if not username:
+        return False
+    cursor.execute(
+        "SELECT reported_by, assigned_to FROM fault_reports WHERE id = %s", (report_id,))
+    ticket = cursor.fetchone()
+    if not ticket:
+        return False
+    if ticket.get('reported_by') == username or (ticket.get('assigned_to') and ticket['assigned_to'] == username):
+        return True
+    if ticket.get('assigned_to'):
+        return False
+    cursor.execute(
+        "SELECT role FROM users WHERE username = %s", (username,))
+    row = cursor.fetchone()
+    return bool(row and row.get('role') in ('ICT Officer', 'Senior ICT Officer', 'ICT Intern'))
+
+@app.get("/api/fault-reports/{report_id}/comments")
+async def get_ticket_comments(report_id: int, username: str = ""):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        ensure_ticket_comments_table(cursor)
+        if not _can_access_ticket(cursor, report_id, username):
+            raise HTTPException(status_code=403, detail="Not authorized to view this ticket")
+        cursor.execute(
+            "SELECT id, report_id, author, author_name, message, archived, created_at FROM ticket_comments WHERE report_id = %s ORDER BY created_at ASC",
+            (report_id,))
+        return {"comments": cursor.fetchall()}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/fault-reports/{report_id}/comments")
+async def add_ticket_comment(report_id: int, data: dict):
+    author = (data.get('author') or '').strip()
+    message = (data.get('message') or '').strip()
+    if not author or not message:
+        raise HTTPException(status_code=400, detail="Author and message are required")
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        ensure_ticket_comments_table(cursor)
+        if not _can_access_ticket(cursor, report_id, author):
+            raise HTTPException(status_code=403, detail="Not authorized to comment on this ticket")
+        cursor.execute("SELECT status FROM fault_reports WHERE id = %s", (report_id,))
+        ticket_status = (cursor.fetchone() or {}).get('status')
+        if ticket_status in ('Resolved', 'Closed'):
+            raise HTTPException(status_code=400, detail="This ticket is solved — its conversation is archived")
+        cursor.execute(
+            "INSERT INTO ticket_comments (report_id, author, author_name, message) VALUES (%s, %s, %s, %s)",
+            (report_id, author, data.get('author_name') or author, message))
+        cursor.execute("SELECT ticket_number, subject, reported_by, assigned_to FROM fault_reports WHERE id = %s", (report_id,))
+        ticket = cursor.fetchone() or {}
+        conn.commit()
+
+        # Notify the other party
+        ticket_label = f"{ticket.get('ticket_number', '#' + str(report_id))}: {ticket.get('subject', '')}"
+        recipients = []
+        if ticket.get('assigned_to') and ticket['assigned_to'] != author:
+            recipients.append(ticket['assigned_to'])
+        if ticket.get('reported_by') and ticket['reported_by'] != author:
+            recipients.append(ticket['reported_by'])
+        if not recipients:
+            recipients = get_officer_usernames()
+        create_notifications(
+            recipients,
+            'New Message on Ticket',
+            f"New reply on {ticket_label}: {message[:120]}",
+            'message')
+        return {"message": "Comment added"}
+    except mysql.connector.Error as err:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(err))
+    finally:
+        cursor.close()
+        conn.close()
+
+# ---------- Notifications ----------
+
+def ensure_notifications_table(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(100) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            message TEXT,
+            type VARCHAR(50) DEFAULT 'info',
+            is_read TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_username (username)
+        )
+    """)
+
+def create_notifications(usernames, title, message, ntype='info'):
+    usernames = [u for u in set(usernames) if u]
+    if not usernames:
+        return
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        ensure_notifications_table(cursor)
+        for u in usernames:
+            cursor.execute(
+                "INSERT INTO notifications (username, title, message, type) VALUES (%s, %s, %s, %s)",
+                (u, title, message, ntype))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+    finally:
+        cursor.close()
+        conn.close()
+
+def get_officer_usernames():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT username FROM users WHERE role IN ('ICT Officer','Senior ICT Officer') AND is_active = TRUE")
+        return [r[0] for r in cursor.fetchall()]
+    except Exception:
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.get("/api/notifications")
+async def get_notifications(username: str):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        ensure_notifications_table(cursor)
+        cursor.execute(
+            "SELECT * FROM notifications WHERE username = %s ORDER BY created_at DESC LIMIT 50",
+            (username,))
+        rows = cursor.fetchall()
+        unread = sum(1 for r in rows if not r.get('is_read'))
+        return {"notifications": rows, "unread": unread}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/notifications/{notif_id}/read")
+async def mark_notification_read(notif_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE notifications SET is_read = 1 WHERE id = %s", (notif_id,))
+        conn.commit()
+        return {"message": "Marked as read"}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.put("/api/notifications/read-all")
+async def mark_all_notifications_read(username: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        ensure_notifications_table(cursor)
+        cursor.execute("UPDATE notifications SET is_read = 1 WHERE username = %s AND is_read = 0", (username,))
+        conn.commit()
+        return {"message": "All notifications marked as read"}
+    finally:
+        cursor.close()
+        conn.close()
+
+# ---------- Password Reset ----------
+
+def ensure_password_resets_table(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS password_resets (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(100) NOT NULL,
+            token VARCHAR(255) NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_token (token)
+        )
+    """)
+
+def send_reset_email(to_email, username, token):
+    import smtplib
+    from email.mime.text import MIMEText
+    frontend_url = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+    body = (
+        f"Hello {username},\n\n"
+        f"A password reset was requested for your ICT Infrastructure System account.\n\n"
+        f"Reset code: {token}\n\n"
+        f"Enter this code on the login page under \"Forgot password?\" to set a new password.\n"
+        f"This code expires in 10 minutes and can only be used once. If you did not request this, ignore this email.\n\n"
+        f"- ICT System"
+    )
+    smtp_host = os.environ.get('SMTP_HOST')
+    if not smtp_host:
+        print(f"[password-reset] No SMTP configured. Reset token for {username}: {token}")
+        return False
+    msg = MIMEText(body)
+    msg['Subject'] = 'ICT System - Password Reset Token'
+    msg['From'] = os.environ.get('SMTP_FROM', os.environ.get('SMTP_USER', 'noreply@localhost'))
+    msg['To'] = to_email
+    try:
+        with smtplib.SMTP(smtp_host, int(os.environ.get('SMTP_PORT', '587')), timeout=15) as server:
+            server.starttls()
+            if os.environ.get('SMTP_USER'):
+                server.login(os.environ.get('SMTP_USER'), os.environ.get('SMTP_PASSWORD', ''))
+            server.send_message(msg)
+        return True
+    except Exception as err:
+        print(f"[password-reset] Failed to send email to {to_email}: {err}")
+        return False
+
+@app.post("/api/forgot-password")
+async def forgot_password(data: dict):
+    identifier = (data.get('identifier') or '').strip()
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        ensure_password_resets_table(cursor)
+        cursor.execute(
+            "SELECT id, username, email FROM users WHERE (username = %s OR email = %s) AND is_active = TRUE",
+            (identifier, identifier))
+        user = cursor.fetchone()
+        if user:
+            otp = f"{secrets.randbelow(1000000):06d}"
+            expires = datetime.now() + timedelta(minutes=10)
+            cursor.execute(
+                "INSERT INTO password_resets (username, token, expires_at) VALUES (%s, %s, %s)",
+                (user['username'], otp, expires))
+            conn.commit()
+            send_reset_email(user.get('email') or '', user['username'], otp)
+        return {"message": "If an account exists for that username or email, a reset token has been sent."}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/reset-password")
+async def reset_password(data: dict):
+    token = (data.get('token') or '').strip()
+    new_password = data.get('new_password') or ''
+    if not token or len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Valid token and a password of at least 6 characters are required")
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        ensure_password_resets_table(cursor)
+        cursor.execute(
+            "SELECT id, username FROM password_resets WHERE token = %s AND used = 0 AND expires_at > %s ORDER BY id DESC LIMIT 1",
+            (token, datetime.now()))
+        reset = cursor.fetchone()
+        if not reset:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        cursor.execute("UPDATE users SET password_hash = %s WHERE username = %s",
+                       (get_password_hash(new_password), reset['username']))
+        cursor.execute("UPDATE password_resets SET used = 1 WHERE id = %s", (reset['id'],))
+        conn.commit()
+        return {"message": "Password reset successfully. You can now sign in."}
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.post("/api/users/change-password")
+async def change_password(data: dict):
+    username = (data.get('username') or '').strip()
+    current_password = data.get('current_password') or ''
+    new_password = data.get('new_password') or ''
+    if not username or not current_password:
+        raise HTTPException(status_code=400, detail="Username and current password are required")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    user = get_user_by_username(username)
+    if not user or not verify_password(current_password, user['password_hash']):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if user.get('role') != 'Super Admin':
+        raise HTTPException(status_code=403, detail="Only Super Admins can change their password here. Contact your administrator.")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET password_hash = %s WHERE username = %s",
+                       (get_password_hash(new_password), username))
+        conn.commit()
+        return {"message": "Password changed successfully"}
     finally:
         cursor.close()
         conn.close()

@@ -45,7 +45,7 @@ interface ICTOfficer {
   full_name: string
   phone?: string
   department: string
-  role: 'Technician' | 'ICT Officer'
+  role: 'Technician' | 'ICT Officer' | 'Senior ICT Officer' | 'ICT Intern'
   specialization: 'Network' | 'Hardware' | 'Software' | 'Security' | 'Database' | 'General'
   skills: string[]
   certifications: string[]
@@ -60,7 +60,12 @@ interface ICTOfficer {
   avg_resolution_time: string
 }
 
-export const ICTOfficer: React.FC = () => {
+interface ICTOfficerProps {
+  role?: 'ICT Officer' | 'Senior ICT Officer' | 'ICT Intern'
+  title?: string
+}
+
+export const ICTOfficer: React.FC<ICTOfficerProps> = ({ role = 'ICT Officer', title }) => {
   const [officers, setOfficers] = useState<ICTOfficer[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -89,7 +94,7 @@ export const ICTOfficer: React.FC = () => {
       if (response.ok) {
         const data = await response.json()
         const users = data.users || []
-        setOfficers(users.filter((u: any) => u.role === 'Technician' || u.role === 'ICT Officer'))
+        setOfficers(users.filter((u: any) => u.role === role))
       } else {
         setOfficers([])
         setMessage('Error loading ICT officers')
@@ -334,7 +339,7 @@ export const ICTOfficer: React.FC = () => {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-blue-800">ICT Officers</CardTitle>
+              <CardTitle className="text-blue-800">{title || 'ICT Officers'}</CardTitle>
               <CardDescription className="text-blue-700">Manage ICT officers and technical staff</CardDescription>
             </div>
             <div className="flex items-center space-x-2">
@@ -346,17 +351,17 @@ export const ICTOfficer: React.FC = () => {
                 <DialogTrigger asChild>
                   <Button>
                     <Plus className="h-4 w-4 mr-2" />
-                    New ICT Officer
+                    New {title || 'ICT Officer'}
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-3xl bg-indigo-50 border-indigo-200">
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-indigo-50 border-indigo-200">
                   <DialogHeader className="pb-6 bg-gradient-to-r from-indigo-50 to-blue-50 -mx-6 px-6 pt-6 border-b">
                     <div className="flex items-center space-x-3">
                       <div className="p-2 bg-indigo-100 rounded-lg">
                         <Cpu className="h-6 w-6 text-indigo-600" />
                       </div>
                       <div>
-                        <DialogTitle className="text-indigo-800 text-xl font-bold">Create ICT Officer</DialogTitle>
+                        <DialogTitle className="text-indigo-800 text-xl font-bold">Create {title || 'ICT Officer'}</DialogTitle>
                         <DialogDescription className="text-indigo-700 text-base">
                           Enter the details for the new ICT officer
                         </DialogDescription>
@@ -364,7 +369,7 @@ export const ICTOfficer: React.FC = () => {
                     </div>
                   </DialogHeader>
                   <div className="pt-6">
-                    <ICTOfficerForm onSubmit={handleAddOfficer} onCancel={() => setIsAddModalOpen(false)} />
+                    <ICTOfficerForm defaultRole={role} onSubmit={handleAddOfficer} onCancel={() => setIsAddModalOpen(false)} />
                   </div>
                 </DialogContent>
               </Dialog>
@@ -600,7 +605,7 @@ export const ICTOfficer: React.FC = () => {
 
             {filteredOfficers.length === 0 && (
               <div className="text-center py-8 text-gray-500">
-                No ICT officers found matching your criteria.
+                No {title || 'ICT Officers'} found matching your criteria.
               </div>
             )}
           </div>
@@ -608,14 +613,14 @@ export const ICTOfficer: React.FC = () => {
       </Card>
 
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-3xl bg-indigo-50 border-indigo-200">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-indigo-50 border-indigo-200">
           <DialogHeader className="pb-6 bg-gradient-to-r from-indigo-50 to-blue-50 -mx-6 px-6 pt-6 border-b">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-indigo-100 rounded-lg">
                 <Edit2 className="h-6 w-6 text-indigo-600" />
               </div>
               <div>
-                <DialogTitle className="text-indigo-800 text-xl font-bold">Edit ICT Officer</DialogTitle>
+                <DialogTitle className="text-indigo-800 text-xl font-bold">Edit {title || 'ICT Officer'}</DialogTitle>
                 <DialogDescription className="text-indigo-700 text-base">
                   Update the ICT officer information
                 </DialogDescription>
@@ -626,6 +631,7 @@ export const ICTOfficer: React.FC = () => {
             <div className="pt-6">
               <ICTOfficerForm
                 officer={editingOfficer}
+                defaultRole={role}
                 onSubmit={handleUpdateOfficer}
                 onCancel={() => {
                   setIsEditModalOpen(false)
@@ -640,7 +646,7 @@ export const ICTOfficer: React.FC = () => {
       <ConfirmDialog
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
-        title="Delete ICT Officer"
+        title={`Delete ${title || 'ICT Officer'}`}
         description={`Are you sure you want to delete this ICT officer? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
@@ -660,18 +666,19 @@ interface ICTOfficerFormData extends Omit<ICTOfficer, 'id' | 'created_at'> {
 
 interface ICTOfficerFormProps {
   officer?: ICTOfficer
+  defaultRole?: ICTOfficerFormData['role']
   onSubmit: (officer: ICTOfficerFormData) => void
   onCancel: () => void
 }
 
-const ICTOfficerForm: React.FC<ICTOfficerFormProps> = ({ officer, onSubmit, onCancel }) => {
+const ICTOfficerForm: React.FC<ICTOfficerFormProps> = ({ officer, defaultRole = 'ICT Officer', onSubmit, onCancel }) => {
   const [formData, setFormData] = useState<ICTOfficerFormData>({
     username: officer?.username || '',
     email: officer?.email || '',
     full_name: officer?.full_name || '',
     phone: officer?.phone || '',
     department: officer?.department || 'IT Department',
-    role: officer?.role || 'Technician',
+    role: officer?.role || defaultRole,
     specialization: officer?.specialization || 'General',
     skills: officer?.skills || [],
     certifications: officer?.certifications || [],
@@ -788,6 +795,8 @@ const ICTOfficerForm: React.FC<ICTOfficerFormProps> = ({ officer, onSubmit, onCa
             <SelectContent>
               <SelectItem value="Technician">Technician</SelectItem>
               <SelectItem value="ICT Officer">ICT Officer</SelectItem>
+              <SelectItem value="Senior ICT Officer">Senior ICT Officer</SelectItem>
+              <SelectItem value="ICT Intern">ICT Intern</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -906,7 +915,7 @@ const ICTOfficerForm: React.FC<ICTOfficerFormProps> = ({ officer, onSubmit, onCa
           Cancel
         </Button>
         <Button type="submit">
-          {officer ? 'Update ICT Officer' : 'Create ICT Officer'}
+          {officer ? `Update ${defaultRole}` : `Create ${defaultRole}`}
         </Button>
       </div>
     </form>
