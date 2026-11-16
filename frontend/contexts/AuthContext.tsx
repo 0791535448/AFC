@@ -11,6 +11,7 @@ interface User {
   role: string
   department?: string
   is_active: boolean
+  must_change_password?: boolean
 }
 
 interface AuthContextType {

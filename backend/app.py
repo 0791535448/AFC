@@ -75,7 +75,7 @@ def get_user_by_username(username: str):
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT id, username, email, full_name, role, department, password_hash, is_active FROM users WHERE username = %s",
+            "SELECT id, username, email, full_name, role, department, password_hash, is_active, must_change_password FROM users WHERE username = %s",
             (username,),
         )
         return cursor.fetchone()
@@ -143,6 +143,7 @@ class User(BaseModel):
     role: str
     department: Optional[str] = None
     is_active: bool = True
+    must_change_password: bool = False
 
 class UserCreate(User):
     password: str
@@ -154,6 +155,7 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    must_change_password: bool = False
 
 class TokenData(BaseModel):
     username: Optional[str] = None
@@ -238,7 +240,8 @@ async def login(user_login: UserLogin):
     access_token = create_access_token(
         data={"sub": user["username"]}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer",
+            "must_change_password": bool(user.get("must_change_password"))}
 
 @app.get("/users/me", response_model=User)
 async def read_users_me(current_user: dict = Depends(get_current_active_user)):
@@ -280,7 +283,7 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
 USER_SELECT = """
     SELECT id, username, email, full_name, role, department, phone, last_login,
            specialization, skills, certifications, experience_level, on_call,
-           is_active, created_at, updated_at
+           is_active, must_change_password, created_at, updated_at
     FROM users
 """
 
@@ -329,8 +332,9 @@ async def create_user_api(user: dict):
         cursor.execute("""
             INSERT INTO users
             (username, email, full_name, role, department, password_hash,
-             phone, specialization, skills, certifications, experience_level, on_call, is_active)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             phone, specialization, skills, certifications, experience_level, on_call, is_active,
+             must_change_password)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             user.get('username'), user.get('email'), user.get('full_name'),
             user.get('role', 'User'), user.get('department'),
@@ -341,6 +345,7 @@ async def create_user_api(user: dict):
             user.get('experience_level'),
             1 if user.get('on_call') else 0,
             1 if user.get('is_active', True) else 0,
+            1 if user.get('must_change_password') else 0,
         ))
         conn.commit()
         return {"message": "User created successfully", "user_id": cursor.lastrowid}
@@ -378,6 +383,8 @@ async def update_user_api(user_id: int, user: dict):
             updates['on_call'] = 1 if user['on_call'] else 0
         if user.get('is_active') is not None:
             updates['is_active'] = 1 if user['is_active'] else 0
+        if user.get('must_change_password') is not None:
+            updates['must_change_password'] = 1 if user['must_change_password'] else 0
         if user.get('password'):
             updates['password_hash'] = get_password_hash(user['password'])
 
@@ -401,8 +408,14 @@ async def update_user_api(user_id: int, user: dict):
 @app.delete("/api/users/{user_id}")
 async def delete_user_api(user_id: int):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
+        cursor.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
+        target = cursor.fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        if target.get('role') == 'Super Admin':
+            raise HTTPException(status_code=403, detail="Super Admin accounts cannot be deleted")
         cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
         conn.commit()
         return {"message": "User deleted successfully"}
@@ -1747,7 +1760,12 @@ def _can_access_ticket(cursor, report_id: int, username: str):
     cursor.execute(
         "SELECT role FROM users WHERE username = %s", (username,))
     row = cursor.fetchone()
-    return bool(row and row.get('role') in ('ICT Officer', 'Senior ICT Officer', 'ICT Intern'))
+    return bool(row and row.get('role') in ('ICT Officer', 'Senior ICT Officer', 'ICT Intern', 'Admin', 'Super Admin'))
+
+def _is_admin_role(cursor, username: str):
+    cursor.execute("SELECT role FROM users WHERE username = %s", (username,))
+    row = cursor.fetchone()
+    return bool(row and row.get('role') in ('Admin', 'Super Admin'))
 
 @app.get("/api/fault-reports/{report_id}/comments")
 async def get_ticket_comments(report_id: int, username: str = ""):
@@ -1755,7 +1773,8 @@ async def get_ticket_comments(report_id: int, username: str = ""):
     cursor = conn.cursor(dictionary=True)
     try:
         ensure_ticket_comments_table(cursor)
-        if not _can_access_ticket(cursor, report_id, username):
+        # Admins may read any thread for oversight; everyone else is limited to the two parties
+        if not (_can_access_ticket(cursor, report_id, username) or _is_admin_role(cursor, username)):
             raise HTTPException(status_code=403, detail="Not authorized to view this ticket")
         cursor.execute(
             "SELECT id, report_id, author, author_name, message, archived, created_at FROM ticket_comments WHERE report_id = %s ORDER BY created_at ASC",
@@ -2003,14 +2022,15 @@ async def change_password(data: dict):
     if len(new_password) < 6:
         raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
     user = get_user_by_username(username)
+    must_reset = bool(user and user.get('must_change_password'))
     if not user or not verify_password(current_password, user['password_hash']):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if user.get('role') != 'Super Admin':
+    if user.get('role') != 'Super Admin' and not must_reset:
         raise HTTPException(status_code=403, detail="Only Super Admins can change their password here. Contact your administrator.")
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("UPDATE users SET password_hash = %s WHERE username = %s",
+        cursor.execute("UPDATE users SET password_hash = %s, must_change_password = 0 WHERE username = %s",
                        (get_password_hash(new_password), username))
         conn.commit()
         return {"message": "Password changed successfully"}

@@ -51,6 +51,7 @@ interface ICTOfficer {
   certifications: string[]
   experience_level: 'Junior' | 'Mid-level' | 'Senior' | 'Lead'
   is_active: boolean
+  must_change_password?: boolean
   on_call: boolean
   created_at: string
   last_login?: string
@@ -684,6 +685,7 @@ const ICTOfficerForm: React.FC<ICTOfficerFormProps> = ({ officer, defaultRole = 
     certifications: officer?.certifications || [],
     experience_level: officer?.experience_level || 'Junior',
     is_active: officer?.is_active ?? true,
+    must_change_password: officer?.must_change_password ?? false,
     on_call: officer?.on_call ?? false,
     last_login: officer?.last_login || '',
     assigned_equipment: officer?.assigned_equipment || 0,
@@ -864,6 +866,18 @@ const ICTOfficerForm: React.FC<ICTOfficerFormProps> = ({ officer, defaultRole = 
             placeholder={officer ? 'Enter new password' : 'Enter password'}
             required={!officer}
           />
+        </div>
+        <div className="flex items-center space-x-2 md:col-span-2">
+          <input
+            id="must_change_password"
+            type="checkbox"
+            checked={!!formData.must_change_password}
+            onChange={(e) => handleInputChange('must_change_password', e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          <Label htmlFor="must_change_password" className="font-normal cursor-pointer">
+            Require password reset on next login
+          </Label>
         </div>
       </div>
 

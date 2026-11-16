@@ -40,6 +40,7 @@ interface User {
   department?: string
   role: 'Super Admin' | 'Admin' | 'Technician' | 'ICT Officer' | 'Senior ICT Officer' | 'ICT Intern' | 'User'
   is_active: boolean
+  must_change_password?: boolean
   created_at: string
   last_login?: string
 }
@@ -209,7 +210,7 @@ export const AllUsers: React.FC<AllUsersProps> = ({ fixedRole, title }) => {
       const response = await fetch(`http://localhost:8000/api/users/${resetUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: resetPassword })
+        body: JSON.stringify({ password: resetPassword, must_change_password: true })
       })
       if (!response.ok) {
         const err = await response.json().catch(() => ({}))
@@ -526,13 +527,15 @@ export const AllUsers: React.FC<AllUsersProps> = ({ fixedRole, title }) => {
                           >
                             <Edit2 className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteUser(user.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {user.role !== 'Super Admin' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -699,6 +702,7 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel, branchLis
     department: user?.department || '',
     role: user?.role || 'User',
     is_active: user?.is_active ?? true,
+    must_change_password: user?.must_change_password ?? false,
     last_login: user?.last_login || '',
     password: ''
   })
@@ -819,6 +823,18 @@ const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel, branchLis
             placeholder={user ? 'Enter new password' : 'Enter password'}
             required={!user}
           />
+        </div>
+        <div className="flex items-center space-x-2 md:col-span-2">
+          <input
+            id="must_change_password"
+            type="checkbox"
+            checked={!!formData.must_change_password}
+            onChange={(e) => handleInputChange('must_change_password', e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          <Label htmlFor="must_change_password" className="font-normal cursor-pointer">
+            Require password reset on next login
+          </Label>
         </div>
       </div>
 

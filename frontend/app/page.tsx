@@ -3,9 +3,10 @@
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { LoginForm } from '@/components/auth/LoginForm'
 import { Dashboard } from '@/components/dashboard/Dashboard'
+import { FirstLoginPassword } from '@/components/auth/FirstLoginPassword'
 
 function AppContent() {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, isLoading, user } = useAuth()
 
   if (isLoading) {
     return (
@@ -20,6 +21,10 @@ function AppContent() {
 
   if (!isAuthenticated) {
     return <LoginForm />
+  }
+
+  if (user?.must_change_password) {
+    return <FirstLoginPassword />
   }
 
   return <Dashboard />

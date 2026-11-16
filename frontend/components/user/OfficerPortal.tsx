@@ -22,14 +22,13 @@ import {
   CheckCircle,
   Clock,
   Package,
-  Edit2,
   ClipboardList,
   FileText,
   Wrench,
   ChevronRight
 } from 'lucide-react'
 import { IssueNotesContent, RepairFormContent } from '@/components/reports/ReportsContent'
-import { TicketComments } from '@/components/tickets/TicketComments'
+import { TicketsManager } from '@/components/tickets/TicketsManager'
 
 const API_BASE_URL = 'http://localhost:8000'
 
@@ -72,7 +71,6 @@ interface Asset {
 
 const faultCategories = ['hardware', 'software', 'network', 'account', 'other']
 const faultPriorities = ['Low', 'Medium', 'High', 'Critical']
-const ticketStatuses = ['Submitted', 'In Progress', 'Resolved', 'Closed']
 
 export const OfficerPortal: React.FC = () => {
   const { user, logout } = useAuth()
@@ -81,8 +79,6 @@ export const OfficerPortal: React.FC = () => {
   const [assets, setAssets] = useState<Asset[]>([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [categoryFilter, setCategoryFilter] = useState('all')
   const [activeSection, setActiveSection] = useState('overview')
   const [expandedMenus, setExpandedMenus] = useState<string[]>([])
 
@@ -110,12 +106,6 @@ export const OfficerPortal: React.FC = () => {
   const [registerForm, setRegisterForm] = useState({
     subject: '', description: '', category: 'hardware', priority: 'Medium',
     asset_tag: '', reported_by: ''
-  })
-
-  // Ticket update modal
-  const [editingTicket, setEditingTicket] = useState<FaultReport | null>(null)
-  const [ticketForm, setTicketForm] = useState({
-    status: 'Submitted', priority: 'Medium', resolution_notes: '', assigned_to: ''
   })
 
   const [submitting, setSubmitting] = useState(false)
@@ -147,13 +137,6 @@ export const OfficerPortal: React.FC = () => {
   useEffect(() => {
     loadData()
   }, [loadData])
-
-  const filteredReports = useMemo(() => {
-    return reports.filter(r =>
-      (statusFilter === 'all' || r.status === statusFilter) &&
-      (categoryFilter === 'all' || r.category === categoryFilter)
-    )
-  }, [reports, statusFilter, categoryFilter])
 
   const stats = useMemo(() => ({
     total: reports.length,
@@ -188,70 +171,6 @@ export const OfficerPortal: React.FC = () => {
       showMessage(error instanceof Error ? error.message : 'Error registering issue')
     } finally {
       setSubmitting(false)
-    }
-  }
-
-  const openTicketEdit = (ticket: FaultReport) => {
-    setEditingTicket(ticket)
-    setTicketForm({
-      status: ticket.status,
-      priority: ticket.priority,
-      resolution_notes: ticket.resolution_notes || '',
-      assigned_to: ticket.assigned_to || ''
-    })
-  }
-
-  const handleUpdateTicket = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingTicket) return
-    setSubmitting(true)
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/fault-reports/${editingTicket.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ticketForm)
-      })
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.detail || 'Failed to update ticket')
-      }
-      showMessage('Ticket updated successfully')
-      setEditingTicket(null)
-      await loadData()
-    } catch (error) {
-      console.error('Error updating ticket:', error)
-      showMessage(error instanceof Error ? error.message : 'Error updating ticket')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Submitted': return 'bg-blue-100 text-blue-800'
-      case 'In Progress': return 'bg-yellow-100 text-yellow-800'
-      case 'Resolved': return 'bg-green-100 text-green-800'
-      case 'Closed': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'hardware': return 'bg-orange-100 text-orange-800'
-      case 'software': return 'bg-blue-100 text-blue-800'
-      case 'network': return 'bg-purple-100 text-purple-800'
-      case 'account': return 'bg-teal-100 text-teal-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'Critical': return 'bg-red-100 text-red-800'
-      case 'High': return 'bg-orange-100 text-orange-800'
-      case 'Medium': return 'bg-yellow-100 text-yellow-800'
-      default: return 'bg-gray-100 text-gray-800'
     }
   }
 
@@ -517,94 +436,7 @@ export const OfficerPortal: React.FC = () => {
 
           {/* Support Tickets */}
           {(activeSection === 'overview' || activeSection === 'tickets') && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Support Tickets</CardTitle>
-                    <CardDescription>All registered ICT issues — update status and repair progress</CardDescription>
-                  </div>
-                  {activeSection === 'tickets' && (
-                    <div className="flex items-center space-x-2">
-                      <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                        <SelectTrigger className="w-36">
-                          <SelectValue placeholder="Filter type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          {faultCategories.map(c => <SelectItem key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger className="w-40">
-                          <SelectValue placeholder="Filter status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Statuses</SelectItem>
-                          {ticketStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <p className="text-gray-500 text-center py-8">Loading...</p>
-                ) : filteredReports.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No tickets found.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subject</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reported By</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned To</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredReports.map(ticket => (
-                          <tr key={ticket.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{ticket.ticket_number}</td>
-                            <td className="px-4 py-3">
-                              <p className="text-sm font-medium text-gray-900">{ticket.subject}</p>
-                              {ticket.asset_tag && <p className="text-xs text-gray-500">Asset: {ticket.asset_tag}</p>}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{ticket.reported_by}</td>
-                            <td className="px-4 py-3 text-sm text-gray-900">{ticket.assigned_to || <span className="text-gray-400">Unassigned</span>}</td>
-                            <td className="px-4 py-3"><Badge className={getCategoryColor(ticket.category)}>{ticket.category}</Badge></td>
-                            <td className="px-4 py-3"><Badge className={getPriorityColor(ticket.priority)}>{ticket.priority}</Badge></td>
-                            <td className="px-4 py-3"><Badge className={getStatusColor(ticket.status)}>{ticket.status}</Badge></td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{new Date(ticket.created_at).toLocaleDateString()}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center space-x-1">
-                                <TicketComments
-                                  reportId={ticket.id}
-                                  ticketLabel={`${ticket.ticket_number} — ${ticket.subject}`}
-                                  currentUsername={user?.username || ''}
-                                  currentName={user?.full_name || ''}
-                                  readOnly={ticket.status === 'Resolved' || ticket.status === 'Closed'}
-                                />
-                                <Button variant="ghost" size="sm" onClick={() => openTicketEdit(ticket)}>
-                                  <Edit2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <TicketsManager showFilters={activeSection === 'tickets'} />
           )}
 
           {/* Equipment Assignments */}
@@ -650,64 +482,6 @@ export const OfficerPortal: React.FC = () => {
           {/* Repair Form */}
           {activeSection === 'repair-form' && <RepairFormContent />}
 
-          {/* Update Ticket Modal */}
-          <Dialog open={!!editingTicket} onOpenChange={(open) => !open && setEditingTicket(null)}>
-            <DialogContent className="max-h-[90vh] overflow-y-auto bg-white">
-              <DialogHeader>
-                <DialogTitle>Update Ticket {editingTicket?.ticket_number}</DialogTitle>
-                <DialogDescription>{editingTicket?.subject}</DialogDescription>
-              </DialogHeader>
-              {editingTicket && (
-                <form onSubmit={handleUpdateTicket} className="space-y-4 pt-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Status (repair progress) *</Label>
-                      <Select value={ticketForm.status} onValueChange={(v) => setTicketForm(prev => ({ ...prev, status: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {ticketStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Priority *</Label>
-                      <Select value={ticketForm.priority} onValueChange={(v) => setTicketForm(prev => ({ ...prev, priority: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {faultPriorities.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Assigned To (officer)</Label>
-                      <Select value={ticketForm.assigned_to} onValueChange={(v) => setTicketForm(prev => ({ ...prev, assigned_to: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                        <SelectContent>
-                          {users.filter(u => ['Technician', 'ICT Officer'].includes(u.role)).map(u => (
-                            <SelectItem key={u.id} value={u.username}>{u.full_name} (@{u.username})</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Resolution Notes</Label>
-                      <textarea
-                        value={ticketForm.resolution_notes}
-                        onChange={(e) => setTicketForm(prev => ({ ...prev, resolution_notes: e.target.value }))}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="What was done to resolve the issue..."
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end space-x-2">
-                    <Button type="button" variant="outline" onClick={() => setEditingTicket(null)}>Cancel</Button>
-                    <Button type="submit" disabled={submitting}>Update Ticket</Button>
-                  </div>
-                </form>
-              )}
-            </DialogContent>
-          </Dialog>
         </main>
       </div>
     </div>

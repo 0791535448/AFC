@@ -25,7 +25,8 @@ import {
   ChevronRight,
   Award,
   Shield,
-  GraduationCap
+  GraduationCap,
+  Ticket
 } from 'lucide-react'
 import { BranchConfig } from '@/components/settings/BranchConfig'
 import { DeviceTypeConfig } from '@/components/settings/DeviceTypeConfig'
@@ -39,6 +40,7 @@ import { SupportManagement } from '@/components/support/SupportManagement'
 import { AllUsers } from '@/components/users/AllUsers'
 import { ICTOfficer } from '@/components/users/ICTOfficer'
 import { IssueNotesContent, RepairFormContent } from '@/components/reports/ReportsContent'
+import { TicketsManager } from '@/components/tickets/TicketsManager'
 
 interface MenuItem {
   id: string
@@ -63,6 +65,11 @@ const menuItems: MenuItem[] = [
     label: 'Support',
     icon: <Headphones className="h-4 w-4" />,
     children: [
+      {
+        id: 'tickets',
+        label: 'Tickets',
+        icon: <Ticket className="h-4 w-4" />
+      },
       {
         id: 'hardware-support',
         label: 'Hardware Support',
@@ -202,6 +209,8 @@ export const AdminDashboard: React.FC = () => {
         return <DashboardContent onNavigate={setActiveMenu} />
       case 'assets':
         return <AssetsContent />
+      case 'tickets':
+        return <TicketsManager />
       case 'hardware-support':
         return <HardwareContent />
       case 'software-support':
